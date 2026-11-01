@@ -102,6 +102,49 @@ DEPLOY_HOST=user@my-server DEPLOY_DIR=/opt/health-widgets ./deploy.sh
 
 The two variables can also go in a git-ignored `.deploy.env` file.
 
+## Automatic deployment (GitHub Actions + Tailscale)
+
+`.github/workflows/server.yml` runs the tests on every change to `backend/`. If you opt
+in, it also deploys every commit pushed to `main` to your server through your
+[Tailscale](https://tailscale.com) network. No SSH port is opened to the internet, and
+no long-lived Tailscale secret is stored in GitHub.
+
+The runner joins your tailnet as `tag:ci` and connects to the server's regular OpenSSH
+daemon with a dedicated key. On the server, that key is locked to a forced command
+(`scripts/server-deploy.sh`). It can only deploy a commit of the public repository: no
+shell, no forwarding, and only from tailnet addresses.
+
+1. **Server**: install the script, then authorize the CI key with these restrictions:
+
+   ```bash
+   sudo install -m 755 scripts/server-deploy.sh /usr/local/sbin/health-widgets-deploy
+   ssh-keygen -t ed25519 -N "" -C github-actions -f ci_key
+   echo "restrict,command=\"HW_APP_DIR=/opt/health-widgets /usr/local/sbin/health-widgets-deploy\",from=\"100.64.0.0/10,fd7a:115c:a1e0::/48\" $(cat ci_key.pub)" \
+     | sudo tee -a /root/.ssh/authorized_keys
+   ```
+
+   `HW_APP_DIR` is the folder holding your `.env` (and your override, if any). OpenSSH must
+   be reachable over the tailnet on a port that Tailscale SSH doesn't intercept: if
+   Tailscale SSH is on, run sshd on another port (for example 2222) and allow it on
+   `tailscale0` only.
+2. **Tailscale** (admin console):
+   - Policy file: declare the tag and let it reach that port, and nothing else:
+
+     ```jsonc
+     "tagOwners": { "tag:ci": ["autogroup:admin"] },
+     // in "acls":
+     { "action": "accept", "src": ["tag:ci"], "dst": ["<server tailnet IP>:<ssh port>"] },
+     ```
+
+   - Settings › Trust credentials › **OpenID Connect**: issuer GitHub Actions, subject
+     `repo:<owner>/<repo>:ref:refs/heads/main`, scope **Auth Keys (write)** with tag
+     `tag:ci` ([docs](https://tailscale.com/kb/1581/workload-identity-federation)).
+3. **GitHub** (repository settings):
+   - Secrets: `TS_OAUTH_CLIENT_ID` and `TS_AUDIENCE` (from step 2), `DEPLOY_SSH_KEY` (the
+     private key), `DEPLOY_KNOWN_HOSTS` (`ssh-keyscan -p <port> <server tailnet IP>`),
+     `DEPLOY_HOST` (the server's tailnet IP), `DEPLOY_PORT`, `DEPLOY_USER`.
+   - Variable: `DEPLOY_ENABLED` = `true`.
+
 ## Tests
 
 ```bash
