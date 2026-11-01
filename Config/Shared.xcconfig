@@ -1,0 +1,18 @@
+// Build identity shared by the app and its widget extension.
+//
+// Don't edit this file: put your own values in Config/Local.xcconfig (git-ignored).
+//   cp Config/Local.example.xcconfig Config/Local.xcconfig
+
+// Your Apple Developer Team ID (Xcode > Settings > Accounts). Not needed for the Simulator.
+DEVELOPMENT_TEAM =
+
+// A bundle identifier that is unique to your build. The widget extension becomes
+// $(HW_BUNDLE_ID).Widgets and both share the App Group below.
+HW_BUNDLE_ID = com.example.healthwidgets
+HW_APP_GROUP = group.$(HW_BUNDLE_ID)
+
+// Optional: server address pre-filled in the app. In xcconfig files `//` starts a comment,
+// so write it as https:/$()/health.example.com
+HW_DEFAULT_SERVER_URL =
+
+#include? "Local.xcconfig"

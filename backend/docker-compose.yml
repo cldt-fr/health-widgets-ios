@@ -1,0 +1,27 @@
+name: health-widgets-api
+
+services:
+  api:
+    build: .
+    image: health-widgets-api
+    container_name: health-widgets-api
+    restart: unless-stopped
+    # Optional: copy .env.example to .env to change the defaults.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      HW_DATA_DIR: /data
+    volumes:
+      # Database, encryption key and signup code. Back this volume up.
+      - health-widgets-data:/data
+    ports:
+      - "${HW_PORT:-8000}:8000"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  health-widgets-data:

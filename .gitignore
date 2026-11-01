@@ -1,0 +1,20 @@
+# macOS / Xcode
+.DS_Store
+xcuserdata/
+DerivedData/
+*.xcuserstate
+build/
+
+# Personal build identity (Team ID, bundle ID): see Config/Local.example.xcconfig
+Config/Local.xcconfig
+
+# Backend
+backend/.venv/
+backend/data/
+backend/.env
+backend/.deploy.env
+backend/docker-compose.override.yml
+backend/.pytest_cache/
+backend/.ruff_cache/
+__pycache__/
+*.pyc

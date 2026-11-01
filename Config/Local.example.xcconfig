@@ -1,0 +1,10 @@
+// Copy this file to Config/Local.xcconfig (git-ignored), then fill it in.
+
+// Team ID: Xcode > Settings > Accounts > your team, or developer.apple.com > Membership.
+DEVELOPMENT_TEAM = ABCDE12345
+
+// Any reverse-DNS identifier you own, unique to your build.
+HW_BUNDLE_ID = com.yourname.healthwidgets
+
+// Optional: your server, pre-filled in the app (keep the $() between the slashes).
+// HW_DEFAULT_SERVER_URL = https:/$()/health.example.com

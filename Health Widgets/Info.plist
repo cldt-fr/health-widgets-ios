@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>fr.cldt.Health-Widgets</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>healthwidgets</string>
+			</array>
+		</dict>
+	</array>
+	<key>HWAppGroup</key>
+	<string>$(HW_APP_GROUP)</string>
+	<key>HWDefaultServerURL</key>
+	<string>$(HW_DEFAULT_SERVER_URL)</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+</dict>
+</plist>
