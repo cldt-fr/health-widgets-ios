@@ -38,6 +38,7 @@ MFA_CHALLENGE_LIFETIME = timedelta(minutes=10)
 MFA_MAX_ATTEMPTS = 5
 LOGIN_WINDOW = timedelta(minutes=15)
 SNAPSHOT_SAVE_INTERVAL = 60.0  # seconds between two persisted copies of the same day
+REVIEW_ACCOUNT_NAME = "Compte de revue (données d'exemple)"
 
 
 class ServiceError(Exception):
@@ -108,6 +109,8 @@ class HealthService:
                 retry_after_seconds=int(LOGIN_WINDOW.total_seconds()),
             )
         self.db.record_login_attempt(user_id, "garmin")
+        if self._is_review_login(request):
+            return self._store_review_account(user_id)
         try:
             result = self.garmin.begin_login(request.email, request.password, is_cn=request.is_cn)
         except ProviderError as exc:
@@ -188,6 +191,34 @@ class HealthService:
             status=ConnectResult.connected, connection=self._connection_info(connection)
         )
 
+    def _is_review_login(self, request: GarminConnectRequest) -> bool:
+        email, password = self.settings.review_email, self.settings.review_password
+        if not (email and password):
+            return False
+        # Both comparisons always run, in constant time.
+        email_ok = constant_time_equals(request.email.strip().lower(), email.strip().lower())
+        password_ok = constant_time_equals(request.password, password)
+        return email_ok and password_ok
+
+    def _store_review_account(self, user_id: str) -> ConnectResponse:
+        """App Review: a Garmin connection served by the demo data (see Settings)."""
+        self.db.upsert_connection(
+            user_id,
+            ProviderId.garmin,
+            status=ConnectionStatus.connected,
+            secret=None,
+            external_id="app-review",
+            display_name="app-review",
+            full_name=REVIEW_ACCOUNT_NAME,
+            meta={"unit_system": "metric", "review": True},
+        )
+        self.garmin.forget(user_id)  # drop the session of a previous real account, if any
+        logger.info("App Review account connected for user %s", user_id)
+        connection = self.db.get_connection(user_id, ProviderId.garmin)
+        return ConnectResponse(
+            status=ConnectResult.connected, connection=self._connection_info(connection)
+        )
+
     @staticmethod
     def _connection_info(connection: Connection | None) -> ConnectionInfo:
         assert connection is not None
@@ -208,6 +239,10 @@ class HealthService:
         provider = connection.provider
 
         if provider == ProviderId.demo:
+            return self.demo.fetch_snapshot(day or date.today(), force=force)
+        if connection.meta.get("review"):
+            # App Review account: sample data, Garmin is never called.
+            self.db.mark_connection_success(user_id, provider)
             return self.demo.fetch_snapshot(day or date.today(), force=force)
 
         if connection.status == ConnectionStatus.reauth_required:

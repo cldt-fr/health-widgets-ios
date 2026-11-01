@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     # Expose a synthetic "demo" provider (App Review, UI work, end-to-end tests).
     enable_demo_provider: bool = False
 
+    # App Store review account. Signing in to Garmin with exactly this email and password
+    # connects a sample account served by the demo data, without calling Garmin, so that
+    # App Review can go through the real sign-in flow. Disabled unless both are set.
+    review_email: str | None = None
+    review_password: str | None = None
+
     log_level: str = "INFO"
 
     @property

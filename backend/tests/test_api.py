@@ -385,3 +385,57 @@ def test_login_attempts_are_limited(client: TestClient, garmin: FakeGarmin) -> N
     )
     assert blocked.status_code == 429
     assert blocked.headers["Retry-After"] == "900"
+
+
+REVIEW = {"email": "Review@Example.com", "password": "Revue-abcd-2345"}
+
+
+def test_review_account_uses_sample_data_without_garmin(
+    settings: Settings, garmin: FakeGarmin
+) -> None:
+    settings.review_email, settings.review_password = REVIEW["email"], REVIEW["password"]
+    client = TestClient(create_app(settings))
+    headers = register(client)
+    signed_in = client.post(
+        "/v1/connections/garmin",
+        json={"email": " review@example.com ", "password": REVIEW["password"]},
+        headers=headers,
+    )
+    assert signed_in.status_code == 200, signed_in.text
+    assert signed_in.json()["status"] == "connected"  # no verification code asked
+    [connection] = client.get("/v1/me", headers=headers).json()["connections"]
+    assert connection["provider"] == "garmin"
+    assert connection["fullName"] == "Compte de revue (données d'exemple)"
+
+    snapshot = client.get("/v1/snapshot", headers=headers)
+    assert snapshot.status_code == 200, snapshot.text
+    assert snapshot.json()["source"]["provider"] == "demo"  # the app labels it as demo data
+    assert not garmin.calls  # Garmin is never called
+
+    # Disconnecting works like for a real account.
+    assert client.delete("/v1/connections/garmin", headers=headers).status_code == 204
+    assert client.get("/v1/snapshot", headers=headers).status_code == 409
+
+
+def test_review_account_needs_the_exact_password(settings: Settings, garmin: FakeGarmin) -> None:
+    settings.review_email, settings.review_password = REVIEW["email"], REVIEW["password"]
+    client = TestClient(create_app(settings))
+    headers = register(client)
+    response = client.post(
+        "/v1/connections/garmin",
+        json={"email": REVIEW["email"], "password": "revue-abcd-2345"},
+        headers=headers,
+    )
+    # Not the review password: this is a regular Garmin sign-in (which asks for a code).
+    assert response.json()["status"] == "mfa_required"
+
+
+def test_review_account_is_off_without_a_password(settings: Settings, garmin: FakeGarmin) -> None:
+    settings.review_email = REVIEW["email"]
+    client = TestClient(create_app(settings))
+    response = client.post(
+        "/v1/connections/garmin",
+        json={"email": REVIEW["email"], "password": "anything"},
+        headers=register(client),
+    )
+    assert response.json()["status"] == "mfa_required"

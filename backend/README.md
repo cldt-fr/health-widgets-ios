@@ -40,6 +40,7 @@ Optional: copy `.env.example` to `.env`, then `docker compose up -d` again.
 | `HW_GARMIN_CALL_TIMEOUT_SECONDS` | `25` | Time budget for the Garmin calls of one snapshot |
 | `HW_MAX_LOGIN_ATTEMPTS` | `5` | Sign-in attempts per 15 minutes (Garmin locks accounts that fail repeatedly) |
 | `HW_ENABLE_DEMO_PROVIDER` | `false` | Synthetic "demo" provider for UI work and testing |
+| `HW_REVIEW_EMAIL`, `HW_REVIEW_PASSWORD` | empty | App Store review account: signing in to Garmin with exactly these credentials connects sample data (the demo provider) instead of Garmin |
 | `HW_LOG_LEVEL` | `INFO` | |
 
 Machine-specific tweaks, such as joining a reverse-proxy network, binding to `127.0.0.1` or
