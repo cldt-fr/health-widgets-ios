@@ -27,7 +27,7 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - run: uv sync --frozen
       - run: uv run ruff check .
       - run: uv run pytest
@@ -44,7 +44,8 @@ jobs:
       id-token: write # Tailscale workload identity federation: no long-lived Tailscale secret
     steps:
       - name: Join the tailnet
-        uses: tailscale/github-action@v4
+        # Pinned by commit: this step handles access to your network.
+        uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4.2.0
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           audience: ${{ secrets.TS_AUDIENCE }}
