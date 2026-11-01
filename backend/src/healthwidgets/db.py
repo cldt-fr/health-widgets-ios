@@ -366,6 +366,10 @@ class Database:
                 (user_id, provider, _iso(utcnow())),
             )
 
+    def purge_login_attempts(self, before: datetime) -> None:
+        with self._tx() as conn:
+            conn.execute("DELETE FROM login_attempts WHERE at < ?", (_iso(before),))
+
     def count_login_attempts_since(self, user_id: str, provider: str, since: datetime) -> int:
         row = self._one(
             "SELECT COUNT(*) AS n FROM login_attempts WHERE user_id = ? AND provider = ? "

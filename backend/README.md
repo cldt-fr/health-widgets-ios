@@ -40,6 +40,7 @@ Optional: copy `.env.example` to `.env`, then `docker compose up -d` again.
 | `HW_GARMIN_CALL_TIMEOUT_SECONDS` | `25` | Time budget for the Garmin calls of one snapshot |
 | `HW_MAX_LOGIN_ATTEMPTS` | `5` | Sign-in attempts per 15 minutes (Garmin locks accounts that fail repeatedly) |
 | `HW_ENABLE_DEMO_PROVIDER` | `false` | Synthetic "demo" provider for UI work and testing |
+| `HW_PRIVACY_OPERATOR`, `HW_PRIVACY_CONTACT`, `HW_PRIVACY_HOSTING` | empty | Who runs the server, a contact email and the hosting provider, shown on the privacy policy page (`/privacy`) |
 | `HW_REVIEW_EMAIL`, `HW_REVIEW_PASSWORD` | empty | App Store review account: signing in to Garmin with exactly these credentials connects sample data (the demo provider) instead of Garmin |
 | `HW_LOG_LEVEL` | `INFO` | |
 
@@ -69,6 +70,12 @@ widgets keep showing something.
 - `DELETE /v1/me` removes the account, its tokens and its cached data.
 - Expose the server over HTTPS if it is reachable from the internet: health data should not
   travel in clear text.
+
+## Privacy policy
+
+`/privacy` serves a privacy policy (in French) that describes what the server stores and
+for how long. Set the three `HW_PRIVACY_*` variables to name the person or company running
+the server, then use `https://<your server>/privacy` as the App Store privacy policy URL.
 
 ## API
 

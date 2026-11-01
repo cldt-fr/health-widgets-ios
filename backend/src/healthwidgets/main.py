@@ -10,12 +10,13 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, Query, Request, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from . import __version__
 from .config import Settings, get_settings
 from .db import Database
+from .privacy import render_privacy_policy
 from .schemas import (
     ConnectResponse,
     DashboardSnapshot,
@@ -109,6 +110,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:
         return {"status": "ok", "version": __version__}
+
+    privacy_page = render_privacy_policy(settings)
+
+    @app.get("/privacy", include_in_schema=False)
+    def privacy() -> HTMLResponse:
+        return HTMLResponse(privacy_page)
 
     @app.post(
         "/v1/devices", response_model=RegisterDeviceResponse, tags=["devices"], status_code=201

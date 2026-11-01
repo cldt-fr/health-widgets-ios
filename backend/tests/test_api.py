@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 import pytest
@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from garminconnect import GarminConnectAuthenticationError
 
 from healthwidgets.config import Settings
+from healthwidgets.db import utcnow
 from healthwidgets.main import create_app
 from healthwidgets.providers.base import (
     Account,
@@ -439,3 +440,47 @@ def test_review_account_is_off_without_a_password(settings: Settings, garmin: Fa
         headers=register(client),
     )
     assert response.json()["status"] == "mfa_required"
+
+
+def test_privacy_policy_names_the_operator(settings: Settings) -> None:
+    settings.privacy_operator = "Jane <Doe>"
+    settings.privacy_contact = "jane@example.com"
+    settings.privacy_hosting = "Example Cloud, en France"
+    page = TestClient(create_app(settings)).get("/privacy")
+    assert page.status_code == 200
+    assert page.headers["content-type"].startswith("text/html")
+    assert "Jane &lt;Doe&gt;" in page.text  # escaped
+    assert 'href="mailto:jane@example.com"' in page.text
+    assert "Example Cloud, en France" in page.text
+
+
+def test_privacy_policy_works_without_settings(client: TestClient) -> None:
+    page = client.get("/privacy")
+    assert page.status_code == 200
+    assert "la personne qui l'a installé" in page.text
+    assert "$" not in page.text  # every placeholder was filled
+
+
+def test_old_sign_in_attempts_are_purged(client: TestClient) -> None:
+    service = client.app.state.service
+    headers = register(client)
+    user_id = service.authenticate(headers["Authorization"].split()[1])
+    service.db.record_login_attempt(user_id, "garmin")
+    month_ago = utcnow() - timedelta(days=30)
+    service.db.purge_login_attempts(utcnow() - timedelta(days=1))
+    assert service.db.count_login_attempts_since(user_id, "garmin", month_ago) == 1
+    service.db.purge_login_attempts(utcnow() + timedelta(seconds=1))
+    assert service.db.count_login_attempts_since(user_id, "garmin", month_ago) == 0
+
+
+def test_cleanup_runs_at_most_hourly(
+    client: TestClient, garmin: FakeGarmin, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service = client.app.state.service
+    purges: list[object] = []
+    monkeypatch.setattr(service.db, "purge_login_attempts", purges.append)
+    headers = register(client)
+    connect_garmin(client, headers)
+    for _ in range(2):
+        client.get("/v1/snapshot", params={"date": "2026-01-14"}, headers=headers)
+    assert len(purges) == 1

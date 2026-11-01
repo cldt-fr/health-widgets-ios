@@ -37,6 +37,8 @@ logger = logging.getLogger(__name__)
 MFA_CHALLENGE_LIFETIME = timedelta(minutes=10)
 MFA_MAX_ATTEMPTS = 5
 LOGIN_WINDOW = timedelta(minutes=15)
+LOGIN_ATTEMPT_RETENTION = timedelta(days=1)
+MAINTENANCE_INTERVAL = 3600.0  # seconds between two clean-ups of expired data
 SNAPSHOT_SAVE_INTERVAL = 60.0  # seconds between two persisted copies of the same day
 REVIEW_ACCOUNT_NAME = "Compte de revue (données d'exemple)"
 
@@ -66,6 +68,7 @@ class HealthService:
         self._user_locks_guard = threading.Lock()
         self._last_forced: dict[str, float] = {}
         self._last_saved: dict[tuple[str, str], float] = {}
+        self._last_maintenance: float | None = None
 
     # -- devices -------------------------------------------------------------------------
 
@@ -235,6 +238,7 @@ class HealthService:
     # -- snapshots -----------------------------------------------------------------------
 
     def snapshot(self, user_id: str, day: date | None, *, force: bool) -> DashboardSnapshot:
+        self._maintenance()
         connection = self._active_connection(user_id)
         provider = connection.provider
 
@@ -303,6 +307,17 @@ class HealthService:
         self._last_saved[key] = now
         payload = self.vault.encrypt(snapshot.model_dump_json(by_alias=True))
         self.db.save_snapshot(user_id, snapshot.calendar_date, payload)
+
+    def _maintenance(self) -> None:
+        """Hourly: delete expired two-step sign-ins and day-old sign-in attempts, as the
+        privacy policy (privacy.py) states."""
+        now = time.monotonic()
+        last = self._last_maintenance
+        if last is not None and now - last < MAINTENANCE_INTERVAL:
+            return
+        self._last_maintenance = now
+        self.db.purge_expired_challenges()
+        self.db.purge_login_attempts(utcnow() - LOGIN_ATTEMPT_RETENTION)
 
     def _user_lock(self, user_id: str) -> threading.Lock:
         with self._user_locks_guard:

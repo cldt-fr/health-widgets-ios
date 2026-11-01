@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     review_email: str | None = None
     review_password: str | None = None
 
+    # Privacy policy served at /privacy (link it from the App Store listing): who runs
+    # this server, how to reach them, and where it is hosted.
+    privacy_operator: str | None = None
+    privacy_contact: str | None = None
+    privacy_hosting: str | None = None
+
     log_level: str = "INFO"
 
     @property
