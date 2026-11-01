@@ -216,7 +216,7 @@ def build_demo_snapshot(day: date, now: datetime | None = None) -> DashboardSnap
         generated_at=now.replace(microsecond=0),
         source=Source(
             provider=ProviderId.demo,
-            device_name="Forerunner 965 (démo)",
+            device_name="Montre GPS (démo)",
             last_sync_at=(end - timedelta(minutes=rng.randint(2, 18))).astimezone(UTC),
         ),
         unit_system="metric",

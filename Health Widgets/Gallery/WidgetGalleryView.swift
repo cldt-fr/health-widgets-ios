@@ -96,7 +96,7 @@ struct WidgetGalleryView: View {
     }
 
     private func entry(_ kind: MetricKind) -> HealthEntry {
-        HealthEntry(date: .now, snapshot: entrySnapshot, metric: kind)
+        HealthEntry(date: DemoData.clock, snapshot: entrySnapshot, metric: kind)
     }
 }
 
@@ -216,29 +216,29 @@ struct LockScreenShowcase: View {
 
     var body: some View {
         VStack(spacing: 18) {
-            Text(Date.now, format: .dateTime.hour().minute())
+            Text(DemoData.clock, format: .dateTime.hour().minute())
                 .font(.system(size: 72, weight: .semibold, design: .rounded))
                 .foregroundStyle(.white.opacity(0.92))
             HStack(spacing: 14) {
                 ForEach([MetricKind.bodyBattery, .readiness, .steps, .sleep], id: \.self) { kind in
                     WidgetPreviewFrame(family: .accessoryCircular) {
-                        MetricWidgetView(entry: HealthEntry(date: .now, snapshot: snapshot, metric: kind), family: .accessoryCircular)
+                        MetricWidgetView(entry: HealthEntry(date: DemoData.clock, snapshot: snapshot, metric: kind), family: .accessoryCircular)
                     }
                 }
             }
             HStack(spacing: 14) {
                 ForEach([MetricKind.hrv, .stress], id: \.self) { kind in
                     WidgetPreviewFrame(family: .accessoryRectangular) {
-                        MetricWidgetView(entry: HealthEntry(date: .now, snapshot: snapshot, metric: kind), family: .accessoryRectangular)
+                        MetricWidgetView(entry: HealthEntry(date: DemoData.clock, snapshot: snapshot, metric: kind), family: .accessoryRectangular)
                     }
                 }
             }
             HStack(spacing: 14) {
                 WidgetPreviewFrame(family: .accessoryRectangular) {
-                    TrainingWidgetView(kind: .plan, entry: HealthEntry(date: .now, snapshot: snapshot), family: .accessoryRectangular)
+                    TrainingWidgetView(kind: .plan, entry: HealthEntry(date: DemoData.clock, snapshot: snapshot), family: .accessoryRectangular)
                 }
                 WidgetPreviewFrame(family: .accessoryRectangular) {
-                    TrainingWidgetView(kind: .recovery, entry: HealthEntry(date: .now, snapshot: snapshot), family: .accessoryRectangular)
+                    TrainingWidgetView(kind: .recovery, entry: HealthEntry(date: DemoData.clock, snapshot: snapshot), family: .accessoryRectangular)
                 }
             }
         }

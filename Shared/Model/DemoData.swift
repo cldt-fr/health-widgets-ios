@@ -114,7 +114,7 @@ nonisolated enum DemoData {
             schemaVersion: DashboardSnapshot.supportedSchemaVersion,
             calendarDate: day,
             generatedAt: now,
-            source: Source(provider: "demo", deviceName: "Forerunner 965", lastSyncAt: now.addingTimeInterval(-7 * 60)),
+            source: Source(provider: "demo", deviceName: "Montre GPS", lastSyncAt: now.addingTimeInterval(-7 * 60)),
             unitSystem: "metric",
             steps: StepsMetric(count: steps, goal: 10000, distanceMeters: Double(steps) * 0.78, history: history(5200...15800, today: Double(steps), goal: 10000)),
             calories: CaloriesMetric(total: 1720 + steps / 22 + (didWorkout ? 640 : 0), active: steps / 22 + (didWorkout ? 640 : 0), resting: 1720),

@@ -146,7 +146,7 @@ struct DashboardView: View {
 
     @ViewBuilder
     private func trainingSection(_ snapshot: DashboardSnapshot) -> some View {
-        let entry = HealthEntry(date: .now, snapshot: snapshot)
+        let entry = HealthEntry(date: DemoData.clock, snapshot: snapshot)
         LazyVGrid(columns: columns, spacing: 14) {
             ForEach([TrainingKind.recovery, .load], id: \.self) { kind in
                 trainingCard(kind, entry: entry, family: .systemSmall, height: 172)
@@ -212,7 +212,7 @@ struct DashboardHeader: View {
                         Text(device)
                     }
                     if let sync = snapshot.source.lastSyncAt {
-                        Text("· synchro \(sync.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))")
+                        Text("· synchro \(sync.relativeToClock)")
                     }
                 }
                 .font(.system(.footnote, design: .rounded))
@@ -236,7 +236,7 @@ struct DashboardHeader: View {
     }
 
     static var greeting: String {
-        switch Calendar.current.component(.hour, from: .now) {
+        switch Calendar.current.component(.hour, from: DemoData.clock) {
         case 5..<12: String(localized: "Bonjour")
         case 12..<18: String(localized: "Bon après-midi")
         default: String(localized: "Bonsoir")
@@ -371,4 +371,12 @@ struct CardButtonStyle: ButtonStyle {
     let model = AppModel()
     model.startDemo()
     return DashboardView().environment(model)
+}
+
+extension Date {
+    /// "il y a 7 min", relative to DemoData.clock: the real time, except in DEBUG
+    /// screenshots taken with -demoHour.
+    var relativeToClock: String {
+        DemoData.clock.formatted(Date.AnchoredRelativeFormatStyle(anchor: self, presentation: .named, unitsStyle: .abbreviated))
+    }
 }

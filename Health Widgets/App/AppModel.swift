@@ -198,6 +198,9 @@ final class AppModel {
             focusedTraining = TrainingKind(rawValue: arguments[index + 1])
         }
         if arguments.contains("-onboarding") { phase = .onboarding }
+        #if DEBUG
+        WidgetArtworkExporter.runIfRequested()
+        #endif
         // End-to-end check against a local server running with HW_ENABLE_DEMO_PROVIDER=true:
         // registers this install, connects the server-side demo provider, opens the dashboard.
         if let index = arguments.firstIndex(of: "-e2e-server"), index + 1 < arguments.count,
