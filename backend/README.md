@@ -136,9 +136,19 @@ shell, no forwarding, and only from tailnet addresses.
      { "action": "accept", "src": ["tag:ci"], "dst": ["<server tailnet IP>:<ssh port>"] },
      ```
 
-   - Settings › Trust credentials › **OpenID Connect**: issuer GitHub Actions, subject
-     `repo:<owner>/<repo>:ref:refs/heads/main`, scope **Auth Keys (write)** with tag
-     `tag:ci` ([docs](https://tailscale.com/kb/1581/workload-identity-federation)).
+   - Settings › Trust credentials › **OpenID Connect**: issuer GitHub, scope
+     **Auth Keys (write)** with tag `tag:ci`
+     ([docs](https://tailscale.com/kb/1581/workload-identity-federation)). For the
+     subject, take the prefix GitHub puts in your repository's tokens and append
+     `:ref:refs/heads/main`. The prefix may include your account and repository IDs:
+
+     ```bash
+     gh api repos/<owner>/<repo>/actions/oidc/customization/sub --jq .sub_claim_prefix
+     # repo:<owner>@<owner id>/<repo>@<repo id>
+     ```
+
+     If they don't match exactly, the credential's page says "Cannot validate subject"
+     and the workflow fails with `token exchange failed with status 403`.
 3. **GitHub** (repository settings):
    - Secrets: `TS_OAUTH_CLIENT_ID` and `TS_AUDIENCE` (from step 2), `DEPLOY_SSH_KEY` (the
      private key), `DEPLOY_KNOWN_HOSTS` (`ssh-keyscan -p <port> <server tailnet IP>`),
