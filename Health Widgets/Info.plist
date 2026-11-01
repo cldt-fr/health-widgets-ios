@@ -17,6 +17,8 @@
 	<string>$(HW_APP_GROUP)</string>
 	<key>HWDefaultServerURL</key>
 	<string>$(HW_DEFAULT_SERVER_URL)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
