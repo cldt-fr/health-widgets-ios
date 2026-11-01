@@ -6,7 +6,7 @@
 
 <p align="center">
   Beautiful iOS widgets for your sports-watch data: Body Battery, sleep, HRV, training
-  readiness, steps, stress, heart rate, VO₂ max, last workout…<br>
+  readiness, recovery, training load, weekly volume, planned workouts, race predictions…<br>
   <b>Garmin today</b>, more providers to come. Self-hosted, private, open source.
 </p>
 
@@ -15,6 +15,10 @@
   <img src="docs/screenshots/widgets-medium.jpg" width="200" alt="Medium widgets">
   <img src="docs/screenshots/widgets-large.jpg" width="200" alt="Large and Lock Screen widgets">
   <img src="docs/screenshots/sleep.jpg" width="200" alt="Sleep details">
+</p>
+<p align="center">
+  <img src="docs/screenshots/training.jpg" width="200" alt="Training dashboard">
+  <img src="docs/screenshots/training-widgets.jpg" width="200" alt="Training widgets">
 </p>
 
 ## How it works
@@ -92,10 +96,16 @@ It also works in the Simulator, without an Apple Developer account.
 | **Metric** (configurable) | small, medium, Lock Screen (circular, rectangular, inline) | One metric: gradient ring, today's curve or 7-day history, sleep stages, readiness factors |
 | **My day** | medium, large | Body Battery, sleep, readiness and steps as rings. The large size adds 6 tiles, the Body Battery curve and a refresh button |
 | **Last workout** | small, medium | Distance, duration, pace or speed, heart rate, aerobic and anaerobic training effect |
+| **Recovery** | small, medium, Lock Screen | Countdown ring to full recovery (keeps moving offline) and today's advice, with readiness, HRV and sleep |
+| **Training load** | small, medium, Lock Screen | Acute load against its optimal range, training status, and the 4-week load focus (aerobic low/high, anaerobic) against your targets |
+| **Training week** | small, medium, Lock Screen | Volume per day and per sport, compared with last week, and time in heart-rate zones (80/20) |
+| **Next workout** | small, medium, Lock Screen | Today's planned workout and the following ones, from your Garmin calendar and Garmin Coach plan |
+| **Race predictions** | small (pick the distance), medium, Lock Screen | 5 km to marathon predicted times with pace, and VO₂ max |
 
 Widgets refresh about every 30 minutes (iOS decides the exact timing), work while the
 iPhone is locked, adapt to tinted and Lock Screen rendering, and open the matching screen
-when tapped. The app's **Widgets** tab previews all of them with your own data.
+when tapped. The app's **Widgets** tab previews all of them with your own data, and the
+**Aujourd'hui** tab has a *Santé* / *Entraînement* switch.
 
 ## Privacy and security
 
@@ -131,7 +141,10 @@ deployment tips.
   | `-demo` | Start in demo mode |
   | `-tab widgets` / `-tab settings` | Open a tab |
   | `-metric sleep` | Open a metric's detail |
-  | `-scrollTo medium` | Scroll to a section (`medium`, `large`, `lock`, `sleep`, `activity`) |
+  | `-training load` | Open a training detail (`load`, `week`, `recovery`, `predictions`, `plan`) |
+  | `-dashboardSection training` | Show the training page of the dashboard |
+  | `-demoHour 20.5` | Render the demo day as if it were 20:30 |
+  | `-scrollTo medium` | Scroll to a section (`medium`, `large`, `lock`, `training`, `sleep`, `activity`, `training-<kind>`) |
   | `-onboarding` | Show the welcome screen |
   | `-e2e-server http://localhost:8000` | Register on a local server (with `HW_OPEN_REGISTRATION=true` and `HW_ENABLE_DEMO_PROVIDER=true`), connect its demo provider and open the dashboard |
 

@@ -31,6 +31,8 @@ nonisolated struct DashboardSnapshot: Codable, Sendable, Hashable {
     var lastActivity: Activity?
     var recentActivities: [Activity] = []
     var racePredictions: RacePredictions?
+    var trainingWeek: TrainingWeek?
+    var upcomingWorkouts: [PlannedWorkout] = []
 
     var warnings: [String] = []
 
@@ -193,6 +195,8 @@ nonisolated struct TrainingReadinessMetric: Codable, Sendable, Hashable {
     var feedbackLong: String?
     var recoveryTimeMinutes: Int?
     var measuredAt: Date?
+    /// When Garmin considers you fully recovered (measuredAt + recoveryTimeMinutes).
+    var recoveryUntil: Date?
     var factors: [ReadinessFactor] = []
 }
 
@@ -205,6 +209,77 @@ nonisolated struct TrainingStatusMetric: Codable, Sendable, Hashable {
     var chronicLoad: Double?
     var loadRatio: Double?
     var acwrStatus: String?
+    var acwrPercent: Int?
+    /// Optimal range for the acute load (0.8x to 1.5x the chronic load).
+    var optimalLoadMin: Double?
+    var optimalLoadMax: Double?
+    var loadFocus: LoadFocus?
+}
+
+nonisolated struct LoadFocusPart: Codable, Sendable, Hashable {
+    var value: Double?
+    var targetMin: Double?
+    var targetMax: Double?
+}
+
+/// Garmin's 4-week load focus: how training load splits between intensities.
+nonisolated struct LoadFocus: Codable, Sendable, Hashable {
+    var aerobicLow: LoadFocusPart?
+    var aerobicHigh: LoadFocusPart?
+    var anaerobic: LoadFocusPart?
+    var feedback: String?
+}
+
+nonisolated struct TrainingDay: Codable, Sendable, Hashable {
+    var date: String
+    var count: Int
+    var durationSeconds: Double
+    var distanceMeters: Double
+    var trainingLoad: Double
+    var sports: [String] = []
+
+    var day: Date? { LocalDay.date(from: date) }
+}
+
+nonisolated struct SportTotal: Codable, Sendable, Hashable {
+    var type: String
+    var count: Int
+    var durationSeconds: Double
+    var distanceMeters: Double
+}
+
+/// This week (Monday to Sunday) of workouts, with last week for comparison.
+nonisolated struct TrainingWeek: Codable, Sendable, Hashable {
+    var weekStart: String
+    var days: [TrainingDay] = []
+    var count: Int
+    var durationSeconds: Double
+    var distanceMeters: Double
+    var trainingLoad: Double
+    var elevationGain: Double
+    var previousWeekCount: Int?
+    var previousWeekDurationSeconds: Double?
+    var previousWeekTrainingLoad: Double?
+    /// Seconds in heart-rate zones 1 to 5.
+    var hrZoneSeconds: [Double] = []
+    var sports: [SportTotal] = []
+}
+
+nonisolated struct PlannedWorkout: Codable, Sendable, Hashable, Identifiable {
+    var date: String
+    var name: String?
+    var sport: String?
+    /// Garmin Coach intent, e.g. AEROBIC_LOW_SHORTAGE_BASE.
+    var intent: String?
+    var durationSeconds: Double?
+    var distanceMeters: Double?
+    var planName: String?
+    var isRestDay: Bool
+    var isRace: Bool
+    var completed: Bool
+
+    var id: String { "\(date)-\(name ?? "rest")-\(sport ?? "")" }
+    var day: Date? { LocalDay.date(from: date) }
 }
 
 nonisolated struct IntensityMinutesMetric: Codable, Sendable, Hashable {

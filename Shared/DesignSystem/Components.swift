@@ -147,7 +147,11 @@ struct AuroraBackground: View {
 
 /// Background shared by every widget (and the in-app widget gallery).
 struct WidgetBackdrop: View {
-    var kind: MetricKind?
+    var colors: [Color]?
+
+    init(kind: MetricKind?) { colors = kind?.colors }
+    init(training: TrainingKind) { colors = training.colors }
+    init(colors: [Color]?) { self.colors = colors }
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -159,15 +163,15 @@ struct WidgetBackdrop: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-            if let kind {
+            if let colors {
                 RadialGradient(
-                    colors: [kind.tint.opacity(dark ? 0.34 : 0.17), .clear],
+                    colors: [colors[0].opacity(dark ? 0.34 : 0.17), .clear],
                     center: .topTrailing,
                     startRadius: 2,
                     endRadius: 200
                 )
                 RadialGradient(
-                    colors: [kind.accent.opacity(dark ? 0.16 : 0.09), .clear],
+                    colors: [colors[1].opacity(dark ? 0.16 : 0.09), .clear],
                     center: .bottomLeading,
                     startRadius: 2,
                     endRadius: 170

@@ -96,6 +96,18 @@ class FakeGarmin:
     def get_race_predictions(self) -> Any:
         return self._serve("race_predictions", raw.race_predictions())
 
+    def get_activities_by_date(self, start: str, end: str) -> Any:
+        return self._serve("week_activities", raw.week_activities())
+
+    def query_garmin_graphql(self, query: dict[str, Any]) -> Any:
+        if "trainingPlanScalar" in query["query"]:
+            return self._serve("training_plan", raw.training_plan())
+        return self._serve("schedule", raw.schedule())
+
+    def get_activity_hr_in_timezones(self, activity_id: int) -> Any:
+        self.calls["zones"] += 1
+        return raw.hr_zones().get(activity_id, [])
+
 
 @pytest.fixture
 def settings(tmp_path) -> Settings:
@@ -255,8 +267,12 @@ def test_snapshot_caching_and_token_rotation(client: TestClient, garmin: FakeGar
     assert body["sleep"]["score"] == 84
     assert body["source"]["provider"] == "garmin"
     assert body["stale"] is False
+    assert body["trainingWeek"]["count"] == 3
+    assert body["upcomingWorkouts"][0]["name"] == "Tempo 3x10"
     first_calls = sum(garmin.calls.values())
-    assert first_calls == 15  # one call per endpoint
+    # One call per endpoint (18), plus heart-rate zones for this week's 3 activities.
+    assert first_calls == 18 + 3
+    assert garmin.calls["zones"] == 3
 
     # Everything is fresh: no Garmin call at all.
     client.get("/v1/snapshot", params={"date": "2026-01-14"}, headers=headers)

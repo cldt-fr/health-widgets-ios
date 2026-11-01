@@ -32,6 +32,9 @@ from ...schemas import (
     HrvBaseline,
     HrvMetric,
     IntensityMinutesMetric,
+    LoadFocus,
+    LoadFocusPart,
+    PlannedWorkout,
     Point,
     ProviderId,
     RacePredictions,
@@ -42,10 +45,13 @@ from ...schemas import (
     SleepStage,
     Source,
     Spo2Metric,
+    SportTotal,
     StepsMetric,
     StressMetric,
+    TrainingDay,
     TrainingReadinessMetric,
     TrainingStatusMetric,
+    TrainingWeek,
 )
 
 logger = logging.getLogger(__name__)
@@ -212,6 +218,7 @@ def build_snapshot(
     unit_system: str | None,
     warnings: list[str] | None = None,
     now: datetime | None = None,
+    activity_zones: dict[int, Any] | None = None,
 ) -> DashboardSnapshot:
     warnings = list(warnings or [])
     summary = as_dict(data.get("summary"))
@@ -265,6 +272,17 @@ def build_snapshot(
             lambda: build_race_predictions(data.get("race_predictions")),
             warnings,
         ),
+        training_week=_section(
+            "training_week",
+            lambda: build_training_week(data.get("week_activities"), activity_zones or {}, day),
+            warnings,
+        ),
+        upcoming_workouts=_section(
+            "upcoming_workouts",
+            lambda: build_upcoming_workouts(data.get("schedule"), data.get("training_plan"), day),
+            warnings,
+        )
+        or [],
         warnings=warnings,
     )
 
@@ -596,13 +614,18 @@ def build_readiness(raw: Any) -> TrainingReadinessMetric | None:
                 value=num(latest.get(value_key)) if value_key else None,
             )
         )
+    measured_at = parse_gmt(latest.get("timestamp"))
+    recovery = integer(latest.get("recoveryTime"))  # minutes left at measured_at
     return TrainingReadinessMetric(
         score=integer(latest.get("score")),
         level=key(latest.get("level")),
         feedback_short=text(latest.get("feedbackShort")),
         feedback_long=text(latest.get("feedbackLong")),
-        recovery_time_minutes=integer(latest.get("recoveryTime")),
-        measured_at=parse_gmt(latest.get("timestamp")),
+        recovery_time_minutes=recovery,
+        measured_at=measured_at,
+        recovery_until=measured_at + timedelta(minutes=recovery)
+        if measured_at is not None and recovery is not None and recovery > 0
+        else None,
         factors=factors,
     )
 
@@ -632,10 +655,195 @@ def build_training_status(raw: Any) -> TrainingStatusMetric | None:
         chronic_load=num(load.get("dailyTrainingLoadChronic")),
         load_ratio=num(load.get("dailyAcuteChronicWorkloadRatio")),
         acwr_status=key(load.get("acwrStatus")),
+        acwr_percent=integer(load.get("acwrPercent")),
+        optimal_load_min=num(load.get("minTrainingLoadChronic")),
+        optimal_load_max=num(load.get("maxTrainingLoadChronic")),
+        load_focus=build_load_focus(
+            _primary(dig(data, "mostRecentTrainingLoadBalance", "metricsTrainingLoadBalanceDTOMap"))
+        ),
     )
     if not any(metric.model_dump(exclude_none=True).values()):
         return None
     return metric
+
+
+def _focus_part(balance: dict[str, Any], name: str) -> LoadFocusPart | None:
+    value = num(balance.get(f"monthlyLoad{name}"))
+    if value is None:
+        return None
+    return LoadFocusPart(
+        value=round(value, 1),
+        target_min=num(balance.get(f"monthlyLoad{name}TargetMin")),
+        target_max=num(balance.get(f"monthlyLoad{name}TargetMax")),
+    )
+
+
+def build_load_focus(balance: dict[str, Any]) -> LoadFocus | None:
+    focus = LoadFocus(
+        aerobic_low=_focus_part(balance, "AerobicLow"),
+        aerobic_high=_focus_part(balance, "AerobicHigh"),
+        anaerobic=_focus_part(balance, "Anaerobic"),
+        feedback=text(balance.get("trainingBalanceFeedbackPhrase")),
+    )
+    if focus.aerobic_low is None and focus.aerobic_high is None and focus.anaerobic is None:
+        return None
+    return focus
+
+
+def _local_day(value: Any) -> date | None:
+    """Calendar day of a Garmin *local* timestamp ("2026-01-14 12:31:05")."""
+    raw = text(value)
+    if raw is None or len(raw) < 10:
+        return None
+    try:
+        return date.fromisoformat(raw[:10])
+    except ValueError:
+        return None
+
+
+def _zone_seconds(raw: Any) -> list[float]:
+    """``[{zoneNumber, secsInZone, zoneLowBoundary}, ...]`` -> seconds in zones 1..5."""
+    zones = [0.0] * 5
+    for item in as_list(raw):
+        if not isinstance(item, dict):
+            continue
+        number, seconds = integer(item.get("zoneNumber")), positive(item.get("secsInZone"))
+        if number is not None and 1 <= number <= 5 and seconds is not None:
+            zones[number - 1] += seconds
+    return zones
+
+
+def week_activity_ids(raw: Any, day: date) -> list[int]:
+    """Ids of this week's activities (Monday to ``day``), for the heart-rate zone calls."""
+    monday = day - timedelta(days=day.weekday())
+    ids = []
+    for item in as_list(raw):
+        if not isinstance(item, dict):
+            continue
+        local = _local_day(item.get("startTimeLocal"))
+        activity_id = integer(item.get("activityId"))
+        if local is not None and activity_id is not None and monday <= local <= day:
+            ids.append(activity_id)
+    return ids
+
+
+def build_training_week(raw: Any, zones: dict[int, Any], day: date) -> TrainingWeek | None:
+    if not isinstance(raw, list):
+        return None  # endpoint failed: don't pretend the week is empty
+    monday = day - timedelta(days=day.weekday())
+    previous_monday = monday - timedelta(days=7)
+    days = {
+        monday + timedelta(days=i): TrainingDay(date=(monday + timedelta(days=i)).isoformat())
+        for i in range(7)
+    }
+    sports: dict[str, SportTotal] = {}
+    previous = {"count": 0, "duration": 0.0, "load": 0.0}
+    week = TrainingWeek(week_start=monday.isoformat())
+    hr_zones = [0.0] * 5
+
+    for item in sorted(
+        (a for a in raw if isinstance(a, dict)), key=lambda a: text(a.get("startTimeLocal")) or ""
+    ):
+        local = _local_day(item.get("startTimeLocal"))
+        if local is None:
+            continue
+        activity_type = item.get("activityType")
+        sport = (
+            text(
+                dig(activity_type, "typeKey") if isinstance(activity_type, dict) else activity_type
+            )
+            or "other"
+        ).lower()
+        duration = positive(first(item.get("duration"), item.get("elapsedDuration"))) or 0.0
+        distance = positive(item.get("distance")) or 0.0
+        load = positive(item.get("activityTrainingLoad")) or 0.0
+        if previous_monday <= local < monday:
+            previous["count"] += 1
+            previous["duration"] += duration
+            previous["load"] += load
+            continue
+        if not monday <= local <= day:
+            continue
+        bucket = days[local]
+        bucket.count += 1
+        bucket.duration_seconds += duration
+        bucket.distance_meters += distance
+        bucket.training_load += load
+        bucket.sports.append(sport)
+        week.count += 1
+        week.duration_seconds += duration
+        week.distance_meters += distance
+        week.training_load += load
+        week.elevation_gain += positive(item.get("elevationGain")) or 0.0
+        total = sports.setdefault(sport, SportTotal(type=sport))
+        total.count += 1
+        total.duration_seconds += duration
+        total.distance_meters += distance
+        activity_id = integer(item.get("activityId"))
+        if activity_id is not None and activity_id in zones:
+            for index, seconds in enumerate(_zone_seconds(zones[activity_id])):
+                hr_zones[index] += seconds
+
+    week.days = [
+        d.model_copy(
+            update={
+                "duration_seconds": round(d.duration_seconds),
+                "distance_meters": round(d.distance_meters, 1),
+                "training_load": round(d.training_load, 1),
+            }
+        )
+        for d in days.values()
+    ]
+    week.duration_seconds = round(week.duration_seconds)
+    week.distance_meters = round(week.distance_meters, 1)
+    week.training_load = round(week.training_load, 1)
+    week.elevation_gain = round(week.elevation_gain)
+    week.previous_week_count = previous["count"]
+    week.previous_week_duration_seconds = round(previous["duration"])
+    week.previous_week_training_load = round(previous["load"], 1)
+    week.hr_zone_seconds = [round(z) for z in hr_zones] if any(hr_zones) else []
+    week.sports = sorted(sports.values(), key=lambda t: t.duration_seconds, reverse=True)
+    return week
+
+
+def _schedule_items(schedule_raw: Any, plan_raw: Any) -> list[tuple[dict[str, Any], str | None]]:
+    """Scheduled workouts and Garmin Coach plan workouts share one item shape."""
+    items: list[tuple[dict[str, Any], str | None]] = []
+    for item in as_list(dig(schedule_raw, "data", "workoutScheduleSummariesScalar")):
+        if isinstance(item, dict):
+            items.append((item, text(item.get("tpPlanName"))))
+    plans = as_list(dig(plan_raw, "data", "trainingPlanScalar", "trainingPlanWorkoutScheduleDTOS"))
+    for plan in plans:
+        if not isinstance(plan, dict):
+            continue
+        for item in as_list(plan.get("workoutScheduleSummaries")):
+            if isinstance(item, dict):
+                items.append((item, text(item.get("tpPlanName")) or text(plan.get("planName"))))
+    return items
+
+
+def build_upcoming_workouts(schedule_raw: Any, plan_raw: Any, day: date) -> list[PlannedWorkout]:
+    workouts: dict[tuple[str, str], PlannedWorkout] = {}
+    for item, plan_name in _schedule_items(schedule_raw, plan_raw):
+        scheduled = _local_day(item.get("scheduleDate"))
+        if scheduled is None or scheduled < day:
+            continue
+        name = text(item.get("workoutName"))
+        identity = str(first(item.get("workoutUuid"), item.get("workoutId"), name, "rest"))
+        workout = PlannedWorkout(
+            date=scheduled.isoformat(),
+            name=name,
+            sport=(text(item.get("workoutType")) or "").lower() or None,
+            intent=text(item.get("workoutPhrase")),
+            duration_seconds=positive(item.get("estimatedDurationInSecs")),
+            distance_meters=positive(item.get("estimatedDistanceInMeters")) or None,
+            plan_name=plan_name,
+            is_rest_day=bool(item.get("isRestDay")),
+            is_race=bool(item.get("race")),
+            completed=item.get("associatedActivityId") is not None,
+        )
+        workouts.setdefault((workout.date, identity), workout)
+    return sorted(workouts.values(), key=lambda w: (w.date, w.is_rest_day))[:10]
 
 
 def build_intensity(

@@ -329,8 +329,28 @@ def training_status() -> dict[str, Any]:
                         "dailyTrainingLoadChronic": 388,
                         "dailyAcuteChronicWorkloadRatio": 1.1,
                         "acwrStatus": "OPTIMAL",
+                        "acwrPercent": 41,
+                        "minTrainingLoadChronic": 310.4,
+                        "maxTrainingLoadChronic": 582.0,
                     },
                 },
+            }
+        },
+        "mostRecentTrainingLoadBalance": {
+            "metricsTrainingLoadBalanceDTOMap": {
+                "1000000002": {
+                    "primaryTrainingDevice": True,
+                    "monthlyLoadAerobicLow": 512.3456,
+                    "monthlyLoadAerobicHigh": 301.1,
+                    "monthlyLoadAnaerobic": 98.7,
+                    "monthlyLoadAerobicLowTargetMin": 380,
+                    "monthlyLoadAerobicLowTargetMax": 690,
+                    "monthlyLoadAerobicHighTargetMin": 330,
+                    "monthlyLoadAerobicHighTargetMax": 560,
+                    "monthlyLoadAnaerobicTargetMin": 80,
+                    "monthlyLoadAnaerobicTargetMax": 210,
+                    "trainingBalanceFeedbackPhrase": "AEROBIC_HIGH_SHORTAGE",
+                }
             }
         },
     }
@@ -419,6 +439,113 @@ def rhr_history() -> list[dict[str, Any]]:
     ]
 
 
+def week_activities() -> list[dict[str, Any]]:
+    """``get_activities_by_date`` from the previous Monday, newest first."""
+
+    def item(aid, local, sport, duration, distance, load, elevation=None):
+        return {
+            "activityId": aid,
+            "startTimeLocal": local,
+            "activityType": {"typeKey": sport},
+            "duration": duration,
+            "distance": distance,
+            "activityTrainingLoad": load,
+            "elevationGain": elevation,
+        }
+
+    return [
+        item(10000000002, "2026-01-14 12:31:05", "strength_training", 2711.4, 0.0, 38.6),
+        item(10000000003, "2026-01-13 07:05:00", "cycling", 3600.0, 30500.0, 95.0, 210.0),
+        item(10000000001, "2026-01-12 18:20:44", "running", 2588.6, 8412.3, 132.8, 64.0),
+        item(10000000000, "2026-01-10 09:00:00", "running", 5400.0, 16000.0, 180.0),
+        item(9999999999, "2026-01-03 09:00:00", "running", 3000.0, 9000.0, 90.0),
+    ]
+
+
+def hr_zones() -> dict[int, Any]:
+    """``get_activity_hr_in_timezones`` per activity (the strength session has none)."""
+
+    def zones(*seconds):
+        return [
+            {"zoneNumber": i + 1, "secsInZone": s, "zoneLowBoundary": 110 + 12 * i}
+            for i, s in enumerate(seconds)
+        ]
+
+    return {
+        10000000001: zones(300.0, 1500.0, 600.0, 150.0, 38.6),
+        10000000003: zones(600.0, 2700.0, 300.0, 0.0, 0.0),
+    }
+
+
+def schedule() -> dict[str, Any]:
+    """GraphQL ``workoutScheduleSummariesScalar`` (today -> +6 days)."""
+    return {
+        "data": {
+            "workoutScheduleSummariesScalar": [
+                {"scheduleDate": "2026-01-13", "workoutId": 110, "workoutName": "Yesterday"},
+                {
+                    "scheduleDate": "2026-01-14",
+                    "workoutUuid": "u-1",
+                    "workoutId": 111,
+                    "workoutName": "Tempo 3x10",
+                    "workoutType": "running",
+                    "estimatedDurationInSecs": 3300,
+                    "estimatedDistanceInMeters": 9500.0,
+                    "associatedActivityId": None,
+                },
+                {
+                    "scheduleDate": "2026-01-16",
+                    "workoutId": 112,
+                    "workoutName": "Strength A",
+                    "workoutType": "strength_training",
+                    "estimatedDurationInSecs": 2400,
+                },
+            ]
+        }
+    }
+
+
+def training_plan() -> dict[str, Any]:
+    """GraphQL ``trainingPlanScalar`` (Garmin Coach), same item shape."""
+    return {
+        "data": {
+            "trainingPlanScalar": {
+                "trainingPlanWorkoutScheduleDTOS": [
+                    {
+                        "planName": "Half Marathon",
+                        "workoutScheduleSummaries": [
+                            {
+                                "scheduleDate": "2026-01-14",
+                                "workoutUuid": "u-1",
+                                "workoutName": "Tempo 3x10",
+                                "workoutType": "running",
+                            },
+                            {
+                                "scheduleDate": "2026-01-15",
+                                "workoutUuid": "u-2",
+                                "workoutName": "Base",
+                                "workoutType": "RUNNING",
+                                "workoutPhrase": "AEROBIC_LOW_SHORTAGE_BASE",
+                                "estimatedDurationInSecs": 2700,
+                            },
+                            {"scheduleDate": "2026-01-17", "isRestDay": True},
+                            {
+                                "scheduleDate": "2026-01-18",
+                                "workoutUuid": "u-3",
+                                "workoutName": "Half marathon",
+                                "workoutType": "running",
+                                "race": True,
+                                "estimatedDistanceInMeters": 21097.5,
+                                "associatedActivityId": None,
+                            },
+                        ],
+                    }
+                ]
+            }
+        }
+    }
+
+
 def bundle() -> dict[str, Any]:
     """Everything ``fetch_raw`` collects for one day, keyed by endpoint name."""
     return {
@@ -437,4 +564,7 @@ def bundle() -> dict[str, Any]:
         "sleep_history": sleep_history(),
         "rhr_history": rhr_history(),
         "hrv_history": None,
+        "week_activities": week_activities(),
+        "schedule": schedule(),
+        "training_plan": training_plan(),
     }

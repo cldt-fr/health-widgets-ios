@@ -3,7 +3,17 @@ import Foundation
 /// Realistic synthetic day, generated on device: offline demo mode, SwiftUI previews and
 /// widget placeholders. Deterministic per calendar day (same seed → same curves).
 nonisolated enum DemoData {
-    static func snapshot(for now: Date = .now, calendar: Calendar = .current) -> DashboardSnapshot {
+    /// DEBUG: `-demoHour 20.5` renders the demo day as if it were 20:30 (screenshots).
+    static var clock: Date {
+        #if DEBUG
+        if let raw = UserDefaults.standard.string(forKey: "demoHour"), let hour = Double(raw) {
+            return Calendar.current.startOfDay(for: .now).addingTimeInterval(hour * 3600)
+        }
+        #endif
+        return .now
+    }
+
+    static func snapshot(for now: Date = DemoData.clock, calendar: Calendar = .current) -> DashboardSnapshot {
         var rng = SeededGenerator(seed: UInt64(calendar.ordinality(of: .day, in: .era, for: now) ?? 1))
         let midnight = calendar.startOfDay(for: now)
         let hoursElapsed = now.timeIntervalSince(midnight) / 3600
@@ -96,6 +106,9 @@ nonisolated enum DemoData {
         )
         let activities = didWorkout ? [run, ride] : [ride]
         let readiness = 84 - (didWorkout ? 9 : 0) + Int.random(in: -5...5, using: &rng)
+        // Recovery clock: restarts at the end of today's workout, else counts from waking up.
+        let recoveryStart = didWorkout ? at(workoutHour + 0.9) : wake
+        let recoveryMinutes = didWorkout ? 14 * 60 : 150
 
         return DashboardSnapshot(
             schemaVersion: DashboardSnapshot.supportedSchemaVersion,
@@ -141,7 +154,8 @@ nonisolated enum DemoData {
             trainingReadiness: TrainingReadinessMetric(
                 score: readiness, level: readiness >= 95 ? "prime" : readiness >= 75 ? "high" : readiness >= 50 ? "moderate" : "low",
                 feedbackShort: "WELL_RECOVERED", feedbackLong: "READY_FOR_ACTION",
-                recoveryTimeMinutes: didWorkout ? 14 * 60 : 0, measuredAt: wake,
+                recoveryTimeMinutes: recoveryMinutes, measuredAt: recoveryStart,
+                recoveryUntil: recoveryStart.addingTimeInterval(TimeInterval(recoveryMinutes * 60)),
                 factors: [
                     ReadinessFactor(key: "sleep", percent: 88, feedback: "good", value: Double(sleepScore)),
                     ReadinessFactor(key: "recovery_time", percent: 92, feedback: "good"),
@@ -153,7 +167,14 @@ nonisolated enum DemoData {
             ),
             trainingStatus: TrainingStatusMetric(
                 status: "productive", feedbackPhrase: "PRODUCTIVE_6", vo2Max: 54, vo2MaxCycling: 56,
-                acuteLoad: 642, chronicLoad: 581, loadRatio: 1.1, acwrStatus: "optimal"
+                acuteLoad: 642, chronicLoad: 581, loadRatio: 1.1, acwrStatus: "optimal",
+                acwrPercent: 46, optimalLoadMin: 465, optimalLoadMax: 872,
+                loadFocus: LoadFocus(
+                    aerobicLow: LoadFocusPart(value: 612, targetMin: 430, targetMax: 780),
+                    aerobicHigh: LoadFocusPart(value: 338, targetMin: 360, targetMax: 620),
+                    anaerobic: LoadFocusPart(value: 126, targetMin: 90, targetMax: 240),
+                    feedback: "AEROBIC_HIGH_SHORTAGE"
+                )
             ),
             intensityMinutes: IntensityMinutesMetric(
                 moderate: 96 + (didWorkout ? 25 : 0), vigorous: 38 + (didWorkout ? 30 : 0),
@@ -163,8 +184,81 @@ nonisolated enum DemoData {
             respiration: RespirationMetric(wakingAvg: 15.1, sleepAvg: 14.2, lowest: 11, highest: 22),
             lastActivity: activities.first,
             recentActivities: activities,
-            racePredictions: RacePredictions(fiveK: 21 * 60 + 34, tenK: 44 * 60 + 52, halfMarathon: 99 * 60 + 5, marathon: 208 * 60 + 40)
+            racePredictions: RacePredictions(fiveK: 21 * 60 + 34, tenK: 44 * 60 + 52, halfMarathon: 99 * 60 + 5, marathon: 208 * 60 + 40),
+            trainingWeek: week(for: now, calendar: calendar, didWorkoutToday: didWorkout),
+            upcomingWorkouts: plan(from: now, calendar: calendar, didWorkoutToday: didWorkout)
         )
+    }
+
+    /// A typical half-marathon block. Weekday: 0 = Monday.
+    private static let block: [(weekday: Int, sport: String, minutes: Double, km: Double, load: Double, name: String, intent: String?)] = [
+        (1, "running", 52, 10.2, 118, String(localized: "Endurance fondamentale"), "AEROBIC_LOW_SHORTAGE_BASE"),
+        (2, "strength_training", 45, 0, 38, String(localized: "Renforcement"), nil),
+        (3, "running", 48, 9.1, 162, String(localized: "Fractionné 6 × 800 m"), "ANAEROBIC_SPEED"),
+        (5, "cycling", 105, 48, 151, String(localized: "Vélo endurance"), "AEROBIC_LOW_SHORTAGE_BASE"),
+        (6, "running", 95, 18, 214, String(localized: "Sortie longue"), "LONG_WORKOUT"),
+    ]
+
+    private static func mondayIndex(_ date: Date, _ calendar: Calendar) -> Int {
+        (calendar.component(.weekday, from: date) + 5) % 7  // Sunday = 1 in Calendar
+    }
+
+    private static func week(for now: Date, calendar: Calendar, didWorkoutToday: Bool) -> TrainingWeek {
+        let today = calendar.startOfDay(for: now)
+        let todayIndex = mondayIndex(today, calendar)
+        let monday = calendar.date(byAdding: .day, value: -todayIndex, to: today) ?? today
+        var days: [TrainingDay] = []
+        var sports: [String: SportTotal] = [:]
+        for offset in 0..<7 {
+            let date = calendar.date(byAdding: .day, value: offset, to: monday) ?? monday
+            var day = TrainingDay(date: LocalDay.string(from: date, calendar: calendar), count: 0, durationSeconds: 0, distanceMeters: 0, trainingLoad: 0)
+            let done = offset < todayIndex || (offset == todayIndex && didWorkoutToday)
+            for workout in block where workout.weekday == offset && done {
+                day.count += 1
+                day.durationSeconds += workout.minutes * 60
+                day.distanceMeters += workout.km * 1000
+                day.trainingLoad += workout.load
+                day.sports.append(workout.sport)
+                var total = sports[workout.sport] ?? SportTotal(type: workout.sport, count: 0, durationSeconds: 0, distanceMeters: 0)
+                total.count += 1
+                total.durationSeconds += workout.minutes * 60
+                total.distanceMeters += workout.km * 1000
+                sports[workout.sport] = total
+            }
+            days.append(day)
+        }
+        let duration = days.reduce(0) { $0 + $1.durationSeconds }
+        return TrainingWeek(
+            weekStart: LocalDay.string(from: monday, calendar: calendar),
+            days: days,
+            count: days.reduce(0) { $0 + $1.count },
+            durationSeconds: duration,
+            distanceMeters: days.reduce(0) { $0 + $1.distanceMeters },
+            trainingLoad: days.reduce(0) { $0 + $1.trainingLoad },
+            elevationGain: (duration / 3600 * 70).rounded(),
+            previousWeekCount: 5,
+            previousWeekDurationSeconds: 5.6 * 3600,
+            previousWeekTrainingLoad: 640,
+            hrZoneSeconds: duration > 0 ? [0.18, 0.56, 0.14, 0.09, 0.03].map { ($0 * duration).rounded() } : [],
+            sports: sports.values.sorted { $0.durationSeconds > $1.durationSeconds }
+        )
+    }
+
+    private static func plan(from now: Date, calendar: Calendar, didWorkoutToday: Bool) -> [PlannedWorkout] {
+        let today = calendar.startOfDay(for: now)
+        let planName = String(localized: "Semi-marathon · Garmin Coach")
+        return (0..<7).compactMap { offset -> PlannedWorkout? in
+            guard let date = calendar.date(byAdding: .day, value: offset, to: today) else { return nil }
+            let day = LocalDay.string(from: date, calendar: calendar)
+            guard let workout = block.first(where: { $0.weekday == mondayIndex(date, calendar) }) else {
+                return PlannedWorkout(date: day, name: String(localized: "Repos"), planName: planName, isRestDay: true, isRace: false, completed: false)
+            }
+            return PlannedWorkout(
+                date: day, name: workout.name, sport: workout.sport, intent: workout.intent,
+                durationSeconds: workout.minutes * 60, distanceMeters: workout.km > 0 ? workout.km * 1000 : nil,
+                planName: planName, isRestDay: false, isRace: false, completed: offset == 0 && didWorkoutToday
+            )
+        }
     }
 }
 

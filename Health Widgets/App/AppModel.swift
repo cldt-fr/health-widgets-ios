@@ -23,6 +23,7 @@ final class AppModel {
     var connections: [ConnectionInfo] = []
     /// Set by deep links (widget taps) to open a metric's detail.
     var focusedMetric: MetricKind?
+    var focusedTraining: TrainingKind?
     var showsLastActivity = false
 
     private let settings = SharedSettings()
@@ -152,6 +153,8 @@ final class AppModel {
         switch url.host() {
         case "metric":
             focusedMetric = MetricKind(rawValue: url.lastPathComponent)
+        case "training":
+            focusedTraining = TrainingKind(rawValue: url.lastPathComponent)
         case "activity":
             showsLastActivity = true
         default:
@@ -190,6 +193,9 @@ final class AppModel {
         }
         if let index = arguments.firstIndex(of: "-metric"), index + 1 < arguments.count {
             focusedMetric = MetricKind(rawValue: arguments[index + 1])
+        }
+        if let index = arguments.firstIndex(of: "-training"), index + 1 < arguments.count {
+            focusedTraining = TrainingKind(rawValue: arguments[index + 1])
         }
         if arguments.contains("-onboarding") { phase = .onboarding }
         // End-to-end check against a local server running with HW_ENABLE_DEMO_PROVIDER=true:

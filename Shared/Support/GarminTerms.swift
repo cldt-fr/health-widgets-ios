@@ -65,6 +65,21 @@ nonisolated enum GarminTerms {
         "vo2max": String(localized: "VO₂ max"),
         "anaerobic_capacity": String(localized: "Capacité anaérobie"),
         "sprint": String(localized: "Sprint"),
+        // Load focus (4 weeks) and acute:chronic workload ratio
+        "aerobic_low_shortage": String(localized: "Manque d'aérobie légère"),
+        "aerobic_high_shortage": String(localized: "Manque d'aérobie intense"),
+        "anaerobic_shortage": String(localized: "Manque d'anaérobie"),
+        "aerobic_low_focus": String(localized: "Focus aérobie légère"),
+        "aerobic_high_focus": String(localized: "Focus aérobie intense"),
+        "anaerobic_focus": String(localized: "Focus anaérobie"),
+        "very_high": String(localized: "Très élevée"),
+        // Garmin Coach workout intents
+        "aerobic_low_shortage_base": String(localized: "Base aérobie"),
+        "aerobic_base_build": String(localized: "Développement aérobie"),
+        "anaerobic_speed": String(localized: "Vitesse"),
+        "long_workout": String(localized: "Sortie longue"),
+        "threshold": String(localized: "Seuil"),
+        "intervals": String(localized: "Fractionné"),
         // Sleep feedback
         "positive_long_and_deep": String(localized: "Nuit longue et profonde"),
         "positive_deep": String(localized: "Beaucoup de sommeil profond"),

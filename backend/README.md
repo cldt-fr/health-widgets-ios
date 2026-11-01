@@ -50,8 +50,9 @@ Docker Compose merges it automatically, and it is git-ignored.
 
 Each Garmin endpoint has its own freshness budget. Steps, heart rate, stress and Body
 Battery are refetched every 5 minutes. Sleep and HRV are refetched every hour, or every
-10–15 minutes until the morning sync has arrived. Race predictions are refetched every
-6 hours. The server only calls Garmin when the app or a widget asks, runs the calls in
+10–15 minutes until the morning sync has arrived. Planned workouts (Garmin calendar and
+Garmin Coach, through Garmin's GraphQL API) are refetched every 30 minutes, race predictions
+every 6 hours, and the heart-rate zones of a finished activity are cached for 30 days. The server only calls Garmin when the app or a widget asks, runs the calls in
 parallel, and caches the raw payloads.
 
 When Garmin can't be reached, or the session has expired, `/v1/snapshot` returns the last

@@ -60,6 +60,17 @@ def endpoint_specs(day: date, today: date, live_ttl: float = 5 * MINUTE) -> list
     d = day.isoformat()
     week_start = (day - timedelta(days=6)).isoformat()
     monday = (day - timedelta(days=day.weekday())).isoformat()
+    previous_monday = (day - timedelta(days=day.weekday() + 7)).isoformat()
+    in_a_week = (day + timedelta(days=6)).isoformat()
+    schedule_query = {
+        "query": f'query{{workoutScheduleSummariesScalar(startDate:"{d}", endDate:"{in_a_week}")}}'
+    }
+    plan_query = {
+        "query": (
+            f'query{{trainingPlanScalar(calendarDate:"{d}", lang:"en-US", '
+            'firstDayOfWeek:"monday")}'
+        )
+    }
     past = day < today
 
     def ttl(value: float) -> float:
@@ -111,6 +122,20 @@ def endpoint_specs(day: date, today: date, live_ttl: float = 5 * MINUTE) -> list
         EndpointSpec("device", lambda g: g.get_device_last_used(), 1 * HOUR, per_day=False),
         EndpointSpec(
             "race_predictions", lambda g: g.get_race_predictions(), 6 * HOUR, per_day=False
+        ),
+        # This week and last week, for the training-week widget.
+        EndpointSpec(
+            "week_activities",
+            lambda g: g.get_activities_by_date(previous_monday, d),
+            ttl(live),
+            live=True,
+        ),
+        # Planned workouts (calendar) and Garmin Coach plans, through Garmin's GraphQL API.
+        EndpointSpec(
+            "schedule", lambda g: g.query_garmin_graphql(schedule_query), ttl(30 * MINUTE)
+        ),
+        EndpointSpec(
+            "training_plan", lambda g: g.query_garmin_graphql(plan_query), ttl(30 * MINUTE)
         ),
     ]
 
@@ -232,3 +257,44 @@ def fetch_raw(
     if rate_limited and not bundle.data:
         raise ProviderRateLimitedError("Garmin is rate limiting this account right now.")
     return bundle
+
+
+def fetch_activity_zones(
+    garmin: Garmin,
+    *,
+    user_id: str,
+    activity_ids: list[int],
+    cache: RawCache,
+    max_workers: int,
+    call_timeout: float,
+) -> dict[int, Any]:
+    """Time in heart-rate zones per activity. A finished activity never changes: cache long."""
+    zones: dict[int, Any] = {}
+    missing = []
+    for activity_id in activity_ids[:21]:
+        entry = cache.get(user_id, f"zones:{activity_id}")
+        if entry is not None:
+            zones[activity_id] = entry.value
+        else:
+            missing.append(activity_id)
+    if not missing:
+        return zones
+
+    pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="garmin-zones")
+    try:
+        futures = {pool.submit(garmin.get_activity_hr_in_timezones, aid): aid for aid in missing}
+        done, _ = wait(futures, timeout=call_timeout)
+        for future in done:
+            activity_id = futures[future]
+            try:
+                value = future.result()
+            except Exception as exc:  # no HR data, deleted activity...: skip this one
+                if is_auth_error(exc):
+                    raise ProviderAuthError("The Garmin session is no longer valid.") from exc
+                logger.info("HR zones for activity %s unavailable: %s", activity_id, describe(exc))
+                continue
+            cache.put(user_id, f"zones:{activity_id}", value, 30 * 24 * HOUR)
+            zones[activity_id] = value
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+    return zones

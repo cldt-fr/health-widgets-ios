@@ -38,6 +38,22 @@ nonisolated extension MetricKind {
     }
 }
 
+nonisolated extension TrainingKind {
+    var colors: [Color] {
+        switch self {
+        case .load: [Color(hex: 0xFF6A3D), Color(hex: 0xFFB547)]
+        case .week: [Color(hex: 0x3D8BFF), Color(hex: 0x8A5CFF)]
+        case .recovery: [Color(hex: 0x14D68C), Color(hex: 0xC4F53D)]
+        case .predictions: [Color(hex: 0x7B61FF), Color(hex: 0x3D9BFF)]
+        case .plan: [Color(hex: 0x00BFB3), Color(hex: 0x7DF7D4)]
+        }
+    }
+
+    var gradient: LinearGradient {
+        LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+}
+
 nonisolated enum Palette {
     static func color(for stage: SleepStage) -> Color {
         switch stage {
@@ -56,6 +72,14 @@ nonisolated enum Palette {
         case .awake: String(localized: "Éveillé")
         }
     }
+
+    /// Garmin's heart-rate zone colours, zone 1 to 5.
+    static let hrZones: [Color] = [
+        Color(hex: 0x9AA5B4), Color(hex: 0x3D8BFF), Color(hex: 0x14D68C), Color(hex: 0xFF9F43), Color(hex: 0xFF4D6D),
+    ]
+
+    /// Load focus colours: aerobic low, aerobic high, anaerobic (Garmin's convention).
+    static let loadFocus: [Color] = [Color(hex: 0x36C5F0), Color(hex: 0xFF9F43), Color(hex: 0xB36BFF)]
 
     /// Deep "night sky" used behind the app and the widgets in dark mode.
     static let night = Color(hex: 0x07080D)

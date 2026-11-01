@@ -7,5 +7,10 @@ struct HealthWidgetsBundle: WidgetBundle {
         MetricWidget()
         OverviewWidget()
         ActivityWidget()
+        RecoveryWidget()
+        TrainingLoadWidget()
+        TrainingWeekWidget()
+        NextWorkoutWidget()
+        RacePredictionsWidget()
     }
 }

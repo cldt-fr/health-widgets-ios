@@ -29,6 +29,29 @@ struct WidgetGalleryView: View {
                         .padding(.horizontal, -16)
                     }
 
+                    GallerySection(title: "Entraînement", subtitle: "Récupération, charge, semaine, séances planifiées et prédictions de course.") {
+                        VStack(spacing: 14) {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 14) {
+                                    ForEach(TrainingKind.allCases) { kind in
+                                        WidgetPreviewFrame(family: .systemSmall, colors: kind.colors) {
+                                            TrainingWidgetView(kind: kind, entry: entry(.readiness), family: .systemSmall)
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                            }
+                            .padding(.horizontal, -16)
+                            ForEach([TrainingKind.load, .week, .recovery, .plan, .predictions], id: \.self) { kind in
+                                WidgetPreviewFrame(family: .systemMedium, colors: kind.colors) {
+                                    TrainingWidgetView(kind: kind, entry: entry(.readiness), family: .systemMedium)
+                                }
+                            }
+                        }
+                    }
+                    .id("training")
+
                     GallerySection(title: "Widgets moyens", subtitle: "Détails, courbes et phases de sommeil.") {
                         VStack(spacing: 14) {
                             WidgetPreviewFrame(family: .systemMedium, kind: .readiness) {
@@ -129,8 +152,20 @@ struct GallerySection<Content: View>: View {
 /// Renders a widget view at its real size, on the same backdrop as on the Home Screen.
 struct WidgetPreviewFrame<Content: View>: View {
     var family: WidgetFamily
-    var kind: MetricKind?
+    var colors: [Color]?
     @ViewBuilder var content: Content
+
+    init(family: WidgetFamily, kind: MetricKind? = nil, @ViewBuilder content: () -> Content) {
+        self.family = family
+        self.colors = kind?.colors
+        self.content = content()
+    }
+
+    init(family: WidgetFamily, colors: [Color], @ViewBuilder content: () -> Content) {
+        self.family = family
+        self.colors = colors
+        self.content = content()
+    }
 
     var body: some View {
         content
@@ -138,7 +173,7 @@ struct WidgetPreviewFrame<Content: View>: View {
             .frame(width: width, height: height)
             .frame(maxWidth: maxWidth)
             .background {
-                if !isAccessory { WidgetBackdrop(kind: kind) }
+                if !isAccessory { WidgetBackdrop(colors: colors) }
             }
             .clipShape(RoundedRectangle(cornerRadius: isAccessory ? 14 : 24, style: .continuous))
             .shadow(color: .black.opacity(isAccessory ? 0 : 0.28), radius: 16, y: 8)
@@ -196,6 +231,14 @@ struct LockScreenShowcase: View {
                     WidgetPreviewFrame(family: .accessoryRectangular) {
                         MetricWidgetView(entry: HealthEntry(date: .now, snapshot: snapshot, metric: kind), family: .accessoryRectangular)
                     }
+                }
+            }
+            HStack(spacing: 14) {
+                WidgetPreviewFrame(family: .accessoryRectangular) {
+                    TrainingWidgetView(kind: .plan, entry: HealthEntry(date: .now, snapshot: snapshot), family: .accessoryRectangular)
+                }
+                WidgetPreviewFrame(family: .accessoryRectangular) {
+                    TrainingWidgetView(kind: .recovery, entry: HealthEntry(date: .now, snapshot: snapshot), family: .accessoryRectangular)
                 }
             }
         }

@@ -254,7 +254,24 @@ class TrainingReadinessMetric(ApiModel):
     feedback_long: str | None = None
     recovery_time_minutes: int | None = None
     measured_at: UtcDatetime | None = None
+    # measured_at + recovery_time_minutes: when Garmin considers you fully recovered.
+    recovery_until: UtcDatetime | None = None
     factors: list[ReadinessFactor] = []
+
+
+class LoadFocusPart(ApiModel):
+    value: float | None = None  # load accumulated over the last 4 weeks
+    target_min: float | None = None
+    target_max: float | None = None
+
+
+class LoadFocus(ApiModel):
+    """Garmin's 4-week load focus: how training splits between intensity types."""
+
+    aerobic_low: LoadFocusPart | None = None
+    aerobic_high: LoadFocusPart | None = None
+    anaerobic: LoadFocusPart | None = None
+    feedback: str | None = None  # e.g. AEROBIC_HIGH_SHORTAGE, BALANCED
 
 
 class TrainingStatusMetric(ApiModel):
@@ -265,7 +282,58 @@ class TrainingStatusMetric(ApiModel):
     acute_load: float | None = None
     chronic_load: float | None = None
     load_ratio: float | None = None
-    acwr_status: str | None = None
+    acwr_status: str | None = None  # low / optimal / high / very_high
+    acwr_percent: int | None = None
+    # Optimal range for the acute load (Garmin: 0.8x to 1.5x the chronic load).
+    optimal_load_min: float | None = None
+    optimal_load_max: float | None = None
+    load_focus: LoadFocus | None = None
+
+
+class TrainingDay(ApiModel):
+    date: str  # YYYY-MM-DD, local
+    count: int = 0
+    duration_seconds: float = 0
+    distance_meters: float = 0
+    training_load: float = 0
+    sports: list[str] = []  # activity type keys, in order
+
+
+class SportTotal(ApiModel):
+    type: str
+    count: int = 0
+    duration_seconds: float = 0
+    distance_meters: float = 0
+
+
+class TrainingWeek(ApiModel):
+    """The current week (Monday to Sunday) of workouts, and last week for comparison."""
+
+    week_start: str
+    days: list[TrainingDay] = []
+    count: int = 0
+    duration_seconds: float = 0
+    distance_meters: float = 0
+    training_load: float = 0
+    elevation_gain: float = 0
+    previous_week_count: int | None = None
+    previous_week_duration_seconds: float | None = None
+    previous_week_training_load: float | None = None
+    hr_zone_seconds: list[float] = []  # time in heart-rate zones 1 to 5, this week
+    sports: list[SportTotal] = []
+
+
+class PlannedWorkout(ApiModel):
+    date: str  # YYYY-MM-DD
+    name: str | None = None
+    sport: str | None = None  # running, cycling, strength_training...
+    intent: str | None = None  # Garmin Coach phrase, e.g. AEROBIC_LOW_SHORTAGE_BASE
+    duration_seconds: float | None = None
+    distance_meters: float | None = None
+    plan_name: str | None = None
+    is_rest_day: bool = False
+    is_race: bool = False
+    completed: bool = False
 
 
 class IntensityMinutesMetric(ApiModel):
@@ -343,6 +411,8 @@ class DashboardSnapshot(ApiModel):
     last_activity: Activity | None = None
     recent_activities: list[Activity] = []
     race_predictions: RacePredictions | None = None
+    training_week: TrainingWeek | None = None
+    upcoming_workouts: list[PlannedWorkout] = []
 
     # Sections that could not be loaded this time ("hrv", "sleep"...), for diagnostics.
     warnings: list[str] = []

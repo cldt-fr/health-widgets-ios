@@ -16,8 +16,8 @@ from ...schemas import DashboardSnapshot
 from ...security import Vault
 from ..base import LoginNeedsMfa, LoginSuccess, ProviderAuthError
 from . import auth
-from .fetch import RawCache, fetch_raw
-from .normalize import build_snapshot
+from .fetch import RawCache, fetch_activity_zones, fetch_raw
+from .normalize import build_snapshot, week_activity_ids
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +83,14 @@ class GarminProvider:
                 max_workers=self._settings.garmin_max_workers,
                 call_timeout=self._settings.garmin_call_timeout_seconds,
             )
+            zones = fetch_activity_zones(
+                session.garmin,
+                user_id=connection.user_id,
+                activity_ids=week_activity_ids(bundle.data.get("week_activities"), day),
+                cache=self._cache,
+                max_workers=self._settings.garmin_max_workers,
+                call_timeout=self._settings.garmin_call_timeout_seconds,
+            )
         except ProviderAuthError:
             self.forget(connection.user_id)
             raise
@@ -98,6 +106,7 @@ class GarminProvider:
             unit_system=connection.meta.get("unit_system")
             or getattr(session.garmin, "unit_system", None),
             warnings=bundle.warnings,
+            activity_zones=zones,
         )
 
     # -- sessions ------------------------------------------------------------------------

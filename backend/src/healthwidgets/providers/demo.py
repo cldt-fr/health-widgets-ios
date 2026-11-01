@@ -22,6 +22,9 @@ from ..schemas import (
     HrvBaseline,
     HrvMetric,
     IntensityMinutesMetric,
+    LoadFocus,
+    LoadFocusPart,
+    PlannedWorkout,
     Point,
     ProviderId,
     RacePredictions,
@@ -32,10 +35,13 @@ from ..schemas import (
     SleepStage,
     Source,
     Spo2Metric,
+    SportTotal,
     StepsMetric,
     StressMetric,
+    TrainingDay,
     TrainingReadinessMetric,
     TrainingStatusMetric,
+    TrainingWeek,
 )
 
 DEMO_TZ = ZoneInfo("Europe/Paris")
@@ -192,6 +198,9 @@ def build_demo_snapshot(day: date, now: datetime | None = None) -> DashboardSnap
     recent = [a for a in (activity, previous) if a is not None]
 
     readiness = 82 - (8 if did_workout else 0) + rng.randint(-6, 6)
+    # Recovery clock: restarts at the end of today's workout, else counts from waking up.
+    recovery_measured = _local(day, workout_at + 0.9) if did_workout else wake
+    recovery_minutes = 14 * 60 if did_workout else 150
     level = (
         "prime"
         if readiness >= 95
@@ -300,8 +309,11 @@ def build_demo_snapshot(day: date, now: datetime | None = None) -> DashboardSnap
             # Garmin sends enum-like keys; the app localizes them.
             feedback_short="WELL_RECOVERED",
             feedback_long="READY_FOR_ACTION",
-            recovery_time_minutes=(14 * 60) if did_workout else 120,
-            measured_at=wake.astimezone(UTC),
+            recovery_time_minutes=recovery_minutes,
+            measured_at=recovery_measured.astimezone(UTC),
+            recovery_until=(recovery_measured + timedelta(minutes=recovery_minutes)).astimezone(
+                UTC
+            ),
             factors=[
                 ReadinessFactor(key="sleep", percent=88, feedback="good", value=sleep_score),
                 ReadinessFactor(key="recovery_time", percent=72, feedback="good", value=2),
@@ -320,6 +332,15 @@ def build_demo_snapshot(day: date, now: datetime | None = None) -> DashboardSnap
             chronic_load=581,
             load_ratio=1.1,
             acwr_status="optimal",
+            acwr_percent=46,
+            optimal_load_min=465,
+            optimal_load_max=872,
+            load_focus=LoadFocus(
+                aerobic_low=LoadFocusPart(value=612, target_min=430, target_max=780),
+                aerobic_high=LoadFocusPart(value=338, target_min=360, target_max=620),
+                anaerobic=LoadFocusPart(value=126, target_min=90, target_max=240),
+                feedback="AEROBIC_HIGH_SHORTAGE",
+            ),
         ),
         intensity_minutes=IntensityMinutesMetric(
             moderate=96 + (25 if did_workout else 0),
@@ -338,4 +359,86 @@ def build_demo_snapshot(day: date, now: datetime | None = None) -> DashboardSnap
             half_marathon=99 * 60 + 5,
             marathon=208 * 60 + 40,
         ),
+        training_week=demo_week(day, did_workout),
+        upcoming_workouts=demo_plan(day, did_workout),
     )
+
+
+# A typical half-marathon block: (weekday, sport, minutes, km, load, name, intent)
+_WEEK = [
+    (1, "running", 52, 10.2, 118, "Endurance fondamentale", "AEROBIC_LOW_SHORTAGE_BASE"),
+    (2, "strength_training", 45, 0, 38, "Renforcement", None),
+    (3, "running", 48, 9.1, 162, "Fractionné 6 x 800 m", "ANAEROBIC_SPEED"),
+    (5, "cycling", 105, 48.0, 151, "Vélo endurance", "AEROBIC_LOW_SHORTAGE_BASE"),
+    (6, "running", 95, 18.0, 214, "Sortie longue", "LONG_WORKOUT"),
+]
+
+
+def demo_week(day: date, did_workout_today: bool) -> TrainingWeek:
+    monday = day - timedelta(days=day.weekday())
+    days = []
+    sports: dict[str, SportTotal] = {}
+    for offset in range(7):
+        current = monday + timedelta(days=offset)
+        entry = TrainingDay(date=current.isoformat())
+        for weekday, sport, minutes, km, load, _, _ in _WEEK:
+            done = current < day or (current == day and did_workout_today)
+            if weekday == current.weekday() and done:
+                entry.count += 1
+                entry.duration_seconds += minutes * 60
+                entry.distance_meters += km * 1000
+                entry.training_load += load
+                entry.sports.append(sport)
+                total = sports.setdefault(sport, SportTotal(type=sport))
+                total.count += 1
+                total.duration_seconds += minutes * 60
+                total.distance_meters += km * 1000
+        days.append(entry)
+    duration = sum(d.duration_seconds for d in days)
+    return TrainingWeek(
+        week_start=monday.isoformat(),
+        days=days,
+        count=sum(d.count for d in days),
+        duration_seconds=duration,
+        distance_meters=sum(d.distance_meters for d in days),
+        training_load=sum(d.training_load for d in days),
+        elevation_gain=round(duration / 3600 * 70),
+        previous_week_count=5,
+        previous_week_duration_seconds=5.6 * 3600,
+        previous_week_training_load=640,
+        hr_zone_seconds=[round(duration * share) for share in (0.18, 0.56, 0.14, 0.09, 0.03)]
+        if duration
+        else [],
+        sports=sorted(sports.values(), key=lambda t: t.duration_seconds, reverse=True),
+    )
+
+
+def demo_plan(day: date, did_workout_today: bool) -> list[PlannedWorkout]:
+    plan = []
+    for offset in range(7):
+        current = day + timedelta(days=offset)
+        match = next((w for w in _WEEK if w[0] == current.weekday()), None)
+        if match is None:
+            plan.append(
+                PlannedWorkout(
+                    date=current.isoformat(),
+                    name="Repos",
+                    is_rest_day=True,
+                    plan_name="Semi-marathon · Garmin Coach",
+                )
+            )
+            continue
+        _, sport, minutes, km, _, name, intent = match
+        plan.append(
+            PlannedWorkout(
+                date=current.isoformat(),
+                name=name,
+                sport=sport,
+                intent=intent,
+                duration_seconds=minutes * 60,
+                distance_meters=km * 1000 or None,
+                plan_name="Semi-marathon · Garmin Coach",
+                completed=offset == 0 and did_workout_today,
+            )
+        )
+    return plan

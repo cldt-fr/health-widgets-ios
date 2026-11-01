@@ -16,7 +16,9 @@ DAY = date(2026, 1, 14)
 
 @pytest.fixture
 def snapshot() -> DashboardSnapshot:
-    return build_snapshot(raw.bundle(), day=DAY, unit_system="metric")
+    return build_snapshot(
+        raw.bundle(), day=DAY, unit_system="metric", activity_zones=raw.hr_zones()
+    )
 
 
 def test_daily_totals(snapshot: DashboardSnapshot) -> None:
@@ -127,6 +129,66 @@ def test_training_status_picks_primary_device(snapshot: DashboardSnapshot) -> No
     assert status.vo2_max == 51.3
     assert (status.acute_load, status.chronic_load, status.load_ratio) == (412, 388, 1.1)
     assert status.acwr_status == "optimal"
+
+
+def test_training_load_optimal_range_and_focus(snapshot: DashboardSnapshot) -> None:
+    status = snapshot.training_status
+    assert status.acwr_percent == 41
+    assert (status.optimal_load_min, status.optimal_load_max) == (310.4, 582.0)
+    focus = status.load_focus
+    assert focus.feedback == "AEROBIC_HIGH_SHORTAGE"
+    assert focus.aerobic_low.value == 512.3
+    assert (focus.aerobic_low.target_min, focus.aerobic_low.target_max) == (380, 690)
+    assert (focus.anaerobic.value, focus.anaerobic.target_max) == (98.7, 210)
+
+
+def test_recovery_until(snapshot: DashboardSnapshot) -> None:
+    readiness = snapshot.training_readiness
+    assert readiness.measured_at == datetime(2026, 1, 14, 19, 42, 10, tzinfo=UTC)
+    assert readiness.recovery_until == datetime(2026, 1, 15, 2, 34, 10, tzinfo=UTC)  # +412 min
+
+
+def test_training_week(snapshot: DashboardSnapshot) -> None:
+    week = snapshot.training_week
+    assert week.week_start == "2026-01-12"
+    assert week.days[0].date == "2026-01-12" and len(week.days) == 7
+    assert [d.count for d in week.days] == [1, 1, 1, 0, 0, 0, 0]
+    assert week.days[1].sports == ["cycling"]
+    assert week.count == 3
+    assert week.duration_seconds == round(2711.4 + 3600.0 + 2588.6)
+    assert week.distance_meters == 38912.3
+    assert week.training_load == 266.4
+    assert week.elevation_gain == 274
+    # Only last week counts as "previous" (the 2026-01-03 run is older).
+    assert (week.previous_week_count, week.previous_week_duration_seconds) == (1, 5400)
+    assert week.previous_week_training_load == 180
+    # Strength has no zones: running + cycling only.
+    assert week.hr_zone_seconds == [900, 4200, 900, 150, 39]
+    assert [s.type for s in week.sports] == ["cycling", "strength_training", "running"]
+
+
+def test_training_week_unavailable_is_none() -> None:
+    data = raw.bundle()
+    data["week_activities"] = None
+    assert build_snapshot(data, day=DAY, unit_system="metric").training_week is None
+
+
+def test_upcoming_workouts_merge_calendar_and_plan(snapshot: DashboardSnapshot) -> None:
+    workouts = snapshot.upcoming_workouts
+    assert [w.date for w in workouts] == [
+        "2026-01-14",
+        "2026-01-15",
+        "2026-01-16",
+        "2026-01-17",
+        "2026-01-18",
+    ]
+    today = workouts[0]
+    assert today.name == "Tempo 3x10" and today.sport == "running"
+    assert (today.duration_seconds, today.distance_meters, today.completed) == (3300, 9500.0, False)
+    base = workouts[1]
+    assert base.sport == "running" and base.intent == "AEROBIC_LOW_SHORTAGE_BASE"
+    assert base.plan_name == "Half Marathon"
+    assert workouts[3].is_rest_day and workouts[4].is_race
 
 
 def test_intensity_minutes_count_vigorous_twice(snapshot: DashboardSnapshot) -> None:

@@ -4,10 +4,22 @@ import WidgetKit
 /// "Today": a live board of the same cards as the widgets, with zoom transitions into
 /// each metric's detail.
 struct DashboardView: View {
+    enum Route: Hashable {
+        case metric(MetricKind)
+        case training(TrainingKind)
+    }
+
+    enum Section: String, CaseIterable, Identifiable {
+        case health, training
+        var id: String { rawValue }
+        var title: LocalizedStringKey { self == .health ? "Santé" : "Entraînement" }
+    }
+
     @Environment(AppModel.self) private var model
     @Namespace private var zoom
-    @State private var path: [MetricKind] = []
+    @State private var path: [Route] = []
     @State private var showsReconnect = false
+    @AppStorage("dashboardSection") private var section: Section = .health
 
     private let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
 
@@ -35,9 +47,14 @@ struct DashboardView: View {
             }
             .background(AuroraBackground())
             .refreshable { await model.refresh(force: true) }
-            .navigationDestination(for: MetricKind.self) { kind in
-                MetricDetailView(kind: kind)
-                    .navigationTransition(.zoom(sourceID: kind, in: zoom))
+            .navigationDestination(for: Route.self) { route in
+                Group {
+                    switch route {
+                    case .metric(let kind): MetricDetailView(kind: kind)
+                    case .training(let kind): TrainingDetailView(kind: kind)
+                    }
+                }
+                .navigationTransition(.zoom(sourceID: route, in: zoom))
             }
             .sheet(isPresented: $showsReconnect) {
                 ReconnectGarminSheet()
@@ -49,8 +66,15 @@ struct DashboardView: View {
             }
             .onChange(of: model.focusedMetric, initial: true) { _, kind in
                 guard let kind else { return }
-                path = [kind]
+                section = .health
+                path = [.metric(kind)]
                 model.focusedMetric = nil
+            }
+            .onChange(of: model.focusedTraining, initial: true) { _, kind in
+                guard let kind else { return }
+                section = .training
+                path = [.training(kind)]
+                model.focusedTraining = nil
             }
         }
     }
@@ -65,65 +89,17 @@ struct DashboardView: View {
             }
 
             DayRingsCard(snapshot: snapshot)
-                .onTapGesture { path.append(.readiness) }
+                .onTapGesture { path.append(.metric(.readiness)) }
 
-            LazyVGrid(columns: columns, spacing: 14) {
-                ForEach(gridMetrics(snapshot), id: \.self) { kind in
-                    if let reading = snapshot.reading(kind) {
-                        NavigationLink(value: kind) {
-                            SmallMetricView(reading: reading, snapshot: snapshot)
-                                .padding(14)
-                                .frame(height: 172)
-                                .cardSurface(tint: kind.tint)
-                                .contentShape(.rect(cornerRadius: 26))
-                        }
-                        .buttonStyle(CardButtonStyle())
-                        .matchedTransitionSource(id: kind, in: zoom)
-                    }
-                }
+            Picker("Section", selection: $section) {
+                ForEach(Section.allCases) { Text($0.title).tag($0) }
             }
+            .pickerStyle(.segmented)
+            .padding(.vertical, 2)
 
-            if let sleep = snapshot.reading(.sleep) {
-                NavigationLink(value: MetricKind.sleep) {
-                    MediumMetricView(reading: sleep, snapshot: snapshot)
-                        .padding(16)
-                        .frame(height: 176)
-                        .cardSurface(tint: MetricKind.sleep.tint)
-                        .contentShape(.rect(cornerRadius: 26))
-                }
-                .buttonStyle(CardButtonStyle())
-                .matchedTransitionSource(id: MetricKind.sleep, in: zoom)
-                .id("sleep")
-            }
-
-            if snapshot.lastActivity != nil {
-                Button { model.showsLastActivity = true } label: {
-                    ActivityWidgetView(entry: HealthEntry(date: .now, snapshot: snapshot), family: .systemMedium)
-                        .padding(16)
-                        .frame(height: 176)
-                        .cardSurface(tint: ActivityStyle(snapshot.lastActivity?.type ?? "").colors[0])
-                        .contentShape(.rect(cornerRadius: 26))
-                }
-                .buttonStyle(CardButtonStyle())
-                .id("activity")
-            }
-
-            if let more = moreMetrics(snapshot), !more.isEmpty {
-                LazyVGrid(columns: columns, spacing: 14) {
-                    ForEach(more, id: \.self) { kind in
-                        if let reading = snapshot.reading(kind) {
-                            NavigationLink(value: kind) {
-                                SmallMetricView(reading: reading, snapshot: snapshot)
-                                    .padding(14)
-                                    .frame(height: 172)
-                                    .cardSurface(tint: kind.tint)
-                                    .contentShape(.rect(cornerRadius: 26))
-                            }
-                            .buttonStyle(CardButtonStyle())
-                            .matchedTransitionSource(id: kind, in: zoom)
-                        }
-                    }
-                }
+            switch section {
+            case .health: healthSection(snapshot)
+            case .training: trainingSection(snapshot)
             }
 
             Text("Données \(snapshot.source.provider == "demo" ? String(localized: "de démonstration") : "Garmin Connect") · \((LocalDay.date(from: snapshot.calendarDate) ?? .now).formatted(date: .abbreviated, time: .omitted))")
@@ -134,6 +110,75 @@ struct DashboardView: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 24)
+    }
+
+    @ViewBuilder
+    private func healthSection(_ snapshot: DashboardSnapshot) -> some View {
+        LazyVGrid(columns: columns, spacing: 14) {
+            ForEach(gridMetrics(snapshot) + (moreMetrics(snapshot) ?? []), id: \.self) { kind in
+                if let reading = snapshot.reading(kind) {
+                    NavigationLink(value: Route.metric(kind)) {
+                        SmallMetricView(reading: reading, snapshot: snapshot)
+                            .padding(14)
+                            .frame(height: 172)
+                            .cardSurface(tint: kind.tint)
+                            .contentShape(.rect(cornerRadius: 26))
+                    }
+                    .buttonStyle(CardButtonStyle())
+                    .matchedTransitionSource(id: Route.metric(kind), in: zoom)
+                }
+            }
+        }
+
+        if let sleep = snapshot.reading(.sleep) {
+            NavigationLink(value: Route.metric(.sleep)) {
+                MediumMetricView(reading: sleep, snapshot: snapshot)
+                    .padding(16)
+                    .frame(height: 176)
+                    .cardSurface(tint: MetricKind.sleep.tint)
+                    .contentShape(.rect(cornerRadius: 26))
+            }
+            .buttonStyle(CardButtonStyle())
+            .matchedTransitionSource(id: Route.metric(.sleep), in: zoom)
+            .id("sleep")
+        }
+    }
+
+    @ViewBuilder
+    private func trainingSection(_ snapshot: DashboardSnapshot) -> some View {
+        let entry = HealthEntry(date: .now, snapshot: snapshot)
+        LazyVGrid(columns: columns, spacing: 14) {
+            ForEach([TrainingKind.recovery, .load], id: \.self) { kind in
+                trainingCard(kind, entry: entry, family: .systemSmall, height: 172)
+            }
+        }
+        ForEach([TrainingKind.week, .plan, .predictions], id: \.self) { kind in
+            trainingCard(kind, entry: entry, family: .systemMedium, height: 176)
+        }
+        if snapshot.lastActivity != nil {
+            Button { model.showsLastActivity = true } label: {
+                ActivityWidgetView(entry: entry, family: .systemMedium)
+                    .padding(16)
+                    .frame(height: 176)
+                    .cardSurface(tint: ActivityStyle(snapshot.lastActivity?.type ?? "").colors[0])
+                    .contentShape(.rect(cornerRadius: 26))
+            }
+            .buttonStyle(CardButtonStyle())
+            .id("activity")
+        }
+    }
+
+    private func trainingCard(_ kind: TrainingKind, entry: HealthEntry, family: WidgetFamily, height: CGFloat) -> some View {
+        NavigationLink(value: Route.training(kind)) {
+            TrainingWidgetView(kind: kind, entry: entry, family: family)
+                .padding(family == .systemSmall ? 14 : 16)
+                .frame(height: height)
+                .cardSurface(tint: kind.colors[0])
+                .contentShape(.rect(cornerRadius: 26))
+        }
+        .buttonStyle(CardButtonStyle())
+        .matchedTransitionSource(id: Route.training(kind), in: zoom)
+        .id("training-\(kind.rawValue)")
     }
 
     private func gridMetrics(_ snapshot: DashboardSnapshot) -> [MetricKind] {
