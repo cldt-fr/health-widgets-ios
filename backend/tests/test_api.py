@@ -484,3 +484,12 @@ def test_cleanup_runs_at_most_hourly(
     for _ in range(2):
         client.get("/v1/snapshot", params={"date": "2026-01-14"}, headers=headers)
     assert len(purges) == 1
+
+
+def test_responses_are_compressed(client: TestClient) -> None:
+    headers = register(client)
+    assert client.post("/v1/connections/demo", headers=headers).status_code == 200
+    response = client.get("/v1/snapshot", headers={**headers, "Accept-Encoding": "gzip"})
+    assert response.status_code == 200
+    assert response.headers["content-encoding"] == "gzip"
+    assert response.json()["source"]["provider"] == "demo"  # transparently decompressed

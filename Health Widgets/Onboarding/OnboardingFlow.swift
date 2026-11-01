@@ -10,7 +10,21 @@ struct OnboardingFlow: View {
     }
 
     @Environment(AppModel.self) private var model
-    @State private var path: [Step] = []
+    @State private var path: [Step] = Self.debugPath
+
+    /// DEBUG: `-onboardingStep code` opens a step directly (screenshots, layout checks).
+    private static var debugPath: [Step] {
+        #if DEBUG
+        switch UserDefaults.standard.string(forKey: "onboardingStep") {
+        case "server": return [.providers, .server]
+        case "garmin": return [.providers, .server, .garmin]
+        case "code": return [.providers, .server, .garmin, .code(challengeID: "debug")]
+        default: return []
+        }
+        #else
+        return []
+        #endif
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -333,12 +347,13 @@ struct GarminCodeView: View {
     @State private var code = ""
     @State private var isWorking = false
     @State private var error: String?
+    @State private var lastSubmitted = ""
     @FocusState private var focused: Bool
 
     var body: some View {
         OnboardingForm(
             title: "Code de vérification",
-            subtitle: "Garmin vient de vous envoyer un code à usage unique (e-mail ou SMS).",
+            subtitle: "Garmin vient de vous envoyer un code à usage unique (e-mail ou SMS). Touchez la suggestion au-dessus du clavier, ou copiez le code puis touchez Coller.",
             symbol: "number.square"
         ) {
             TextField("123456", text: $code)
@@ -350,14 +365,37 @@ struct GarminCodeView: View {
                 .padding(.vertical, 14)
                 .cardSurface(tint: MetricKind.bodyBattery.tint, cornerRadius: 20)
                 .onChange(of: code) { _, value in
-                    code = String(value.filter(\.isNumber).prefix(8))
+                    code = Self.sanitized(value)
+                    // Garmin codes have 6 digits: send as soon as one is typed, pasted or
+                    // filled in by iOS, once per code.
+                    if code.count == 6, code != lastSubmitted, !isWorking {
+                        lastSubmitted = code
+                        Task { await submit() }
+                    }
                 }
+            PasteButton(payloadType: String.self) { strings in
+                if let text = strings.first, let found = Self.code(in: text) { code = found }
+            }
+            .buttonBorderShape(.capsule)
+            .frame(maxWidth: .infinity)
             if let error { ErrorText(error) }
             PrimaryButton(title: "Valider", isWorking: isWorking, isEnabled: code.count >= 4) {
                 Task { await submit() }
             }
         }
         .onAppear { focused = true }
+    }
+
+    /// Digits only, at most 8. Also undoes an iOS autofill that inserts the code twice.
+    static func sanitized(_ value: String) -> String {
+        var digits = String(value.filter(\.isNumber))
+        if digits.count == 12, digits.prefix(6) == digits.suffix(6) { digits = String(digits.prefix(6)) }
+        return String(digits.prefix(8))
+    }
+
+    /// The code inside a pasted message ("Your security code is 123456").
+    static func code(in text: String) -> String? {
+        text.firstMatch(of: /\d{4,8}/).map { String($0.output) }
     }
 
     private func submit() async {

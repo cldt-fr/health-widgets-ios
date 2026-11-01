@@ -15,6 +15,13 @@ nonisolated struct SnapshotCache: Sendable {
         try? data.write(to: fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
 
+    /// Seconds since the snapshot was written, nil when there is none.
+    var age: TimeInterval? {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path(percentEncoded: false))
+        guard let written = attributes?[.modificationDate] as? Date else { return nil }
+        return Date.now.timeIntervalSince(written)
+    }
+
     func clear() {
         try? FileManager.default.removeItem(at: fileURL)
     }

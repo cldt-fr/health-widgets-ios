@@ -11,12 +11,12 @@ struct WidgetGalleryView: View {
         NavigationStack {
             ScrollViewReader { proxy in
                 ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
+                LazyVStack(alignment: .leading, spacing: 28) {
                     HowToCard()
 
                     GallerySection(title: "Petits widgets", subtitle: "Une métrique, en grand. Touchez longuement un widget pour choisir laquelle.") {
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 14) {
+                            LazyHStack(spacing: 14) {
                                 ForEach(MetricKind.allCases.filter { entrySnapshot.reading($0) != nil }) { kind in
                                     WidgetPreviewFrame(family: .systemSmall, kind: kind) {
                                         MetricWidgetView(entry: entry(kind), family: .systemSmall)
@@ -32,7 +32,7 @@ struct WidgetGalleryView: View {
                     GallerySection(title: "Entraînement", subtitle: "Récupération, charge, semaine, séances planifiées et prédictions de course.") {
                         VStack(spacing: 14) {
                             ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 14) {
+                                LazyHStack(spacing: 14) {
                                     ForEach(TrainingKind.allCases) { kind in
                                         WidgetPreviewFrame(family: .systemSmall, colors: kind.colors) {
                                             TrainingWidgetView(kind: kind, entry: entry(.readiness), family: .systemSmall)

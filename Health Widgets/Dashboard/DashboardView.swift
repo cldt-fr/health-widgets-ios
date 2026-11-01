@@ -29,8 +29,20 @@ struct DashboardView: View {
             ScrollView {
                 if let snapshot = model.snapshot {
                     content(snapshot)
-                } else if model.isRefreshing {
-                    ProgressView().padding(.top, 120)
+                } else if model.isRefreshing || model.isFirstSync {
+                    VStack(spacing: 12) {
+                        ProgressView().controlSize(.large)
+                        if model.isFirstSync {
+                            Text("Première synchronisation avec Garmin…")
+                                .font(.headline)
+                            Text("Récupération de vos données du jour. Cela peut prendre jusqu'à 30 secondes.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                    .padding(.top, 120)
                 } else {
                     ContentUnavailableView {
                         Label("Pas encore de données", systemImage: "applewatch")

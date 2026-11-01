@@ -273,6 +273,13 @@ class HealthService:
                 self.db.mark_connection_error(user_id, provider, str(exc))
                 return self._fallback(user_id, day, exc)
 
+        logger.info(
+            "Snapshot for user %s (%s%s) in %.1fs",
+            user_id,
+            day,
+            ", forced" if force else "",
+            time.monotonic() - now,
+        )
         self.db.mark_connection_success(user_id, provider)
         self._save(user_id, snapshot)
         return snapshot

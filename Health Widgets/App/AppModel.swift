@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 import WidgetKit
 
 /// App-wide state: onboarding, today's snapshot, connections, deep links.
@@ -18,6 +19,8 @@ final class AppModel {
     var tab: Tab = .today
     var snapshot: DashboardSnapshot?
     var isRefreshing = false
+    /// Right after connecting a watch: the first Garmin sync can take ~30 s.
+    var isFirstSync = false
     /// Last refresh problem (shown as a banner); the cached snapshot stays on screen.
     var refreshError: APIError?
     var connections: [ConnectionInfo] = []
@@ -84,11 +87,20 @@ final class AppModel {
     }
 
     func finishOnboarding() {
+        // Close the keyboard (code or password field) before the dashboard replaces the
+        // form, so it doesn't lay out around a keyboard that is going away.
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         settings.isDemoMode = false
         settings.isOnboarded = true
+        snapshot = nil
+        refreshError = nil
+        isFirstSync = true
         phase = .dashboard
         tab = .today
-        Task { await refresh(force: true) }
+        Task {
+            await refresh(force: true)
+            isFirstSync = false
+        }
     }
 
     // MARK: Data
@@ -99,14 +111,24 @@ final class AppModel {
         defer { isRefreshing = false }
         do {
             let result = try await repository.load(refresh: force)
+            let previous = snapshot
             snapshot = result.snapshot
             refreshError = result.error ?? (result.snapshot.needsReauth ? .providerReauthRequired : nil)
-            WidgetCenter.shared.reloadAllTimelines()
+            if Self.contentChanged(from: previous, to: result.snapshot) {
+                WidgetCenter.shared.reloadAllTimelines()
+            }
         } catch let error as APIError {
             refreshError = error
         } catch {
             refreshError = .network(error.localizedDescription)
         }
+    }
+
+    /// generatedAt changes on every fetch: widgets only need a reload when the rest does.
+    private static func contentChanged(from old: DashboardSnapshot?, to new: DashboardSnapshot) -> Bool {
+        guard var old else { return true }
+        old.generatedAt = new.generatedAt
+        return old != new
     }
 
     func loadConnections() async {

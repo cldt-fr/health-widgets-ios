@@ -31,6 +31,8 @@ nonisolated struct SnapshotRepository: Sendable {
     }
 
     /// Fetches today's snapshot. Falls back to the cache (and reports why) on failure.
+    /// Runs off the main actor: network, JSON decoding and the cache write.
+    @concurrent
     func load(refresh: Bool = false, timeout: TimeInterval = 45) async throws -> Result {
         if settings.isDemoMode {
             return Result(snapshot: DemoData.snapshot(), source: .network)

@@ -10,6 +10,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, Query, Request, status
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -106,6 +107,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return user_id
 
     User = Annotated[str, Depends(current_user)]
+
+    # Snapshots are ~15 KB of JSON: ~4x smaller compressed, which matters on cellular.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
 
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:

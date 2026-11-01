@@ -25,7 +25,7 @@ enum SnapshotTimeline {
             return (HealthEntry(date: .now, snapshot: nil, metric: metric, message: message), refreshInterval)
         }
         do {
-            let result = try await repository.load(timeout: 15)
+            let result = try await WidgetSnapshotLoader.shared.load(repository)
             let interval = result.error == nil ? refreshInterval : retryInterval
             return (HealthEntry(date: .now, snapshot: result.snapshot, metric: metric), interval)
         } catch {
@@ -68,5 +68,28 @@ struct StaticSnapshotProvider: TimelineProvider {
             let (entry, interval) = await SnapshotTimeline.entry(metric: metric, isPreview: isPreview)
             completion(Timeline(entries: [entry], policy: .after(.now.addingTimeInterval(interval))))
         }
+    }
+}
+
+/// One network fetch for all the widgets of this extension: reuses the snapshot the app
+/// (or another widget) saved a moment ago, and merges simultaneous requests, instead of
+/// every widget kind downloading the same snapshot after each reload.
+actor WidgetSnapshotLoader {
+    static let shared = WidgetSnapshotLoader()
+    /// The app saves each snapshot it fetches, then reloads the widgets: reuse it.
+    static let freshness: TimeInterval = 5 * 60
+
+    private var inFlight: Task<SnapshotRepository.Result, Error>?
+
+    func load(_ repository: SnapshotRepository) async throws -> SnapshotRepository.Result {
+        if !repository.settings.isDemoMode, let age = repository.cache.age, age < Self.freshness,
+           let cached = repository.cache.load() {
+            return SnapshotRepository.Result(snapshot: cached, source: .cache)
+        }
+        if let inFlight { return try await inFlight.value }
+        let task = Task { try await repository.load(timeout: 15) }
+        inFlight = task
+        defer { inFlight = nil }
+        return try await task.value
     }
 }
