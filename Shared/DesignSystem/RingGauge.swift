@@ -92,6 +92,10 @@ struct RingValue: View {
                 }
             }
             .padding(lineWidth * 1.4)
+            // The ring is drawn in the largest centered square: size the text against that
+            // square, not the whole frame, so "10 811" shrinks instead of crossing the ring
+            // when the frame is wider than tall (small widget).
+            .aspectRatio(1, contentMode: .fit)
         }
     }
 }
