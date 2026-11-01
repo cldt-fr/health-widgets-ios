@@ -318,6 +318,28 @@ def test_expired_session_serves_stale_data(client: TestClient, garmin: FakeGarmi
     assert me["connections"][0]["status"] == "reauth_required"
 
 
+def test_throttles_work_right_after_boot(
+    client: TestClient, garmin: FakeGarmin, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """time.monotonic() counts from boot: it is close to 0 on a fresh CI runner or server."""
+    import types
+
+    import healthwidgets.service as service_module
+
+    # The service's clock only: freezing time.monotonic globally would stall threads.
+    monkeypatch.setattr(service_module, "time", types.SimpleNamespace(monotonic=lambda: 5.0))
+    headers = register(client)
+    connect_garmin(client, headers)
+    client.get("/v1/snapshot", params={"date": "2026-01-14"}, headers=headers)
+    # The first snapshot is persisted for the stale fallback...
+    service = client.app.state.service
+    user_id = service.authenticate(headers["Authorization"].split()[1])
+    assert service.db.get_snapshot(user_id, "2026-01-14") is not None
+    # ...and the first forced refresh is honoured.
+    client.get("/v1/snapshot", params={"date": "2026-01-14", "refresh": "true"}, headers=headers)
+    assert garmin.calls["summary"] == 2
+
+
 def test_expired_session_without_cache_is_an_error(client: TestClient, garmin: FakeGarmin) -> None:
     headers = register(client)
     connect_garmin(client, headers)

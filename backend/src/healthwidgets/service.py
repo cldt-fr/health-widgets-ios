@@ -216,8 +216,9 @@ class HealthService:
         with self._user_lock(user_id):  # one Garmin fetch per user at a time
             now = time.monotonic()
             if force:
-                last = self._last_forced.get(user_id, 0.0)
-                if now - last < self.settings.min_force_refresh_seconds:
+                # No entry means "never": monotonic time starts near 0 right after a boot.
+                last = self._last_forced.get(user_id)
+                if last is not None and now - last < self.settings.min_force_refresh_seconds:
                     force = False  # refreshed a few seconds ago: cached data is fresh
                 else:
                     self._last_forced[user_id] = now
@@ -261,7 +262,8 @@ class HealthService:
     def _save(self, user_id: str, snapshot: DashboardSnapshot) -> None:
         key = (user_id, snapshot.calendar_date)
         now = time.monotonic()
-        if now - self._last_saved.get(key, 0.0) < SNAPSHOT_SAVE_INTERVAL:
+        last = self._last_saved.get(key)
+        if last is not None and now - last < SNAPSHOT_SAVE_INTERVAL:
             return
         self._last_saved[key] = now
         payload = self.vault.encrypt(snapshot.model_dump_json(by_alias=True))
